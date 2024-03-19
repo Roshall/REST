@@ -21,7 +21,7 @@ class TestSliding:
     dfilter = partial(df_filter, reg_verifier=region.enclose, target_label=labels.keys())
 
     def test_naive(self):
-        sliding = NaiveSliding(self.frames, self.duration, self.obj_verifier, len_filter, self.dfilter)
+        sliding = NaiveSliding(self.frames, self.duration, self.obj_verifier, self.dfilter)
         res = list(sliding)
         assert len(res) == 8
 
@@ -29,7 +29,7 @@ class TestSliding:
         ans = [CoMovementPattern(labels={1: 0, 3: 0, 2: 0}, interval=[5, 10]),
                CoMovementPattern(labels={1: 0, 3: 0}, interval=[4, 10]),
                CoMovementPattern(labels={1: 0}, interval=[1, 10])]
-        sliding = NaiveSliding(self.frames, self.duration, self.obj_verifier, len_filter, self.dfilter)
+        sliding = NaiveSliding(self.frames, self.duration, self.obj_verifier, self.dfilter)
         res = list(state_sliding(sliding, self.obj_verifier, base_maintainer))
 
         assert res == ans
