@@ -156,7 +156,7 @@ def base_search(spat_tempo_idx, region: Box2D, labels: Mapping, duration_range, 
         return iter([])
 
 
-def base_maintainer(cur, prev, new, count, to_absorb):
+def base_maintainer(end, prev, new, count, to_absorb):
     if to_absorb:
         prev_iter = iter(prev)
         return islice(prev_iter, count), prev_iter

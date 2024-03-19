@@ -1,6 +1,6 @@
 import heapq
 from collections import Counter, deque
-from collections.abc import Iterable, MutableMapping
+from collections.abc import Iterable, MutableMapping, Callable
 from collections.abc import Mapping, Sequence
 from itertools import takewhile, islice
 from operator import attrgetter
@@ -93,7 +93,10 @@ def df_filter(df, reg_verifier, target_label):
     return df
 
 
-def state_sliding(pat_series: Iterable[CoMovementPattern], obj_verifier, state_maintainer):
+def state_sliding(pat_series: Iterable[CoMovementPattern],
+                  obj_verifier,
+                  state_maintainer: Callable[[int, Sequence, Sequence, int, bool], [Iterable, Iterable]])\
+        -> Iterable[CoMovementPattern]:
     # $prev stores seen patterns. Every pattern is a set of objs that co-moves a certain period
     # Note that in terms of object set, prev[0] ⊃ prev[1] ⊃ prev[2] ⊃ ...
     pat_iter = iter(pat_series)
@@ -103,6 +106,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern], obj_verifier, state_m
     prev = [cur]
     for cur in pat_iter:
         absort = False
+        cur_end = cur.end
         if cur.start > prev[0].end + 1:  # not consecutive in time interval
             count = len(prev)
             new = [cur]
@@ -113,7 +117,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern], obj_verifier, state_m
                 inter = pat.objs & cur.objs
                 if len(inter) == len(pat):  # pat is a subset of cur
                     if len(inter) == len(cur):  # pat equals to cur
-                        pat.end = cur.end
+                        pat.end = cur_end
                     else:
                         new.append(cur)
                     absort = True
@@ -127,7 +131,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern], obj_verifier, state_m
                     new_pattern = CoMovementPattern({obj: cur.labels[obj] for obj in inter})
                     new.append(cur)
                     if obj_verifier(new_pattern.label_count()):  # a new pattern
-                        new_pattern.interval = [pat.start, cur.end]
+                        new_pattern.interval = [pat.start, cur_end]
                         cur = new_pattern
                         count += 1
                     else:
@@ -135,7 +139,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern], obj_verifier, state_m
             else:
                 new.append(cur)
 
-        fruits, prev_iter = state_maintainer(cur, prev, new, count, absort)
+        fruits, prev_iter = state_maintainer(cur_end, prev, new, count, absort)
         prev_end = prev[0].end
         for pat in fruits:
             pat.end = prev_end
@@ -145,7 +149,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern], obj_verifier, state_m
         prev = new
 
     if prev:
-        fruits, _ = state_maintainer(cur, prev, [], len(prev), False)
+        fruits, _ = state_maintainer(0, prev, [], len(prev), False)
         prev_end = prev[0].end
         for pat in fruits:
             pat.end = prev_end
