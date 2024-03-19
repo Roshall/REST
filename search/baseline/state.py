@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from itertools import islice
 
 from search.co_moving import CoMovementPattern
@@ -20,27 +20,21 @@ def pat_wrapper(frames, obj_verifier, dfilter):
 
 
 def state_maintain(win_len):
-    valid_ptr: int | None = None
+    valid_ptr: int = 0
 
-    def inner(cur, prev, new, count, absort):
+    def inner(end, prev: Sequence, new: Sequence, count: int, absort: bool):
         nonlocal valid_ptr
         prev_iter = iter(prev)
-        fruits = []
-        if valid_ptr is not None:
-            if count >= valid_ptr:
-                if count != valid_ptr:
-                    fruits = islice(prev_iter, valid_ptr, count)
-                valid_ptr = len(new) if count != len(prev) else None
-            elif absort:
-                valid_ptr -= count + len(new)
-                if cur.end - prev[valid_ptr - 1].start + 1 == win_len:
-                    valid_ptr -= 1
-            else:
-                fruits = islice(prev_iter, valid_ptr, None)
-                valid_ptr = None
+        # fruits is in [valid_ptr, count) if absort or [valid_ptr, len(prev))
+        # in case that count <= valid_ptr, no fruit can be yielded, but we must only advance iterator to `count`
+        # that's why min(valid_ptr, count)
+        fruits = islice(prev_iter, min(valid_ptr, count), count if absort else None)
+        if absort and count < valid_ptr:
+            if win_len - (end - prev[valid_ptr - 1].start) < 1:  # check if we can recede pointer
+                valid_ptr -= 1
+            valid_ptr += len(new) - count
         else:
-            if cur.end - prev[-1].start + 1 == win_len:
-                valid_ptr = len(new) + len(prev) - count - 1
+            valid_ptr = len(new)
         return fruits, prev_iter
 
     return inner
