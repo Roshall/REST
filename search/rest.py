@@ -143,7 +143,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern],
         prev_end = prev[0].end
         for pat in fruits:
             pat.end = prev_end
-            yield pat
+            yield pat.to_plain()
 
         new.extend(prev_iter)
         prev = new
@@ -153,4 +153,4 @@ def state_sliding(pat_series: Iterable[CoMovementPattern],
         prev_end = prev[0].end
         for pat in fruits:
             pat.end = prev_end
-            yield pat
+            yield pat.to_plain()

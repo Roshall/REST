@@ -31,6 +31,9 @@ class CoMovementPattern:
     def label_count(self):
         return Counter(self.labels.values())
 
+    def to_plain(self):
+        return tuple(self.labels), *self.interval
+
     def __len__(self):
         return len(self.labels)
 
@@ -43,4 +46,4 @@ class CoMovementPattern:
         return tuple(self.interval) == tuple(other.interval) and self.objs == other.objs
 
     def __str__(self):
-        return f'({tuple(self.labels)}, {self.interval})'
+        return str(self.to_plain())
