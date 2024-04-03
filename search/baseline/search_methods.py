@@ -11,7 +11,7 @@ def sliding_framework(df, region, labels, duration, interval, *, method='base'):
     dur = duration[0]
     frames = group_by_frame(df, interval)
     obj_verifier = partial(obj_verify, labels)
-    dfilter = partial(df_filter, reg_verfier=region.enclose, target_label=labels.keys())
+    dfilter = partial(df_filter, reg_verifier=region.enclose, target_label=labels.keys())
     match method:
         case 'base':
             slider = base_slider
