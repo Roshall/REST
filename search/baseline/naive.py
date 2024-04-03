@@ -1,15 +1,16 @@
-from collections import Counter
+from collections import Counter, deque
 from functools import partial
+from itertools import islice
 
 from search.base import base_maintainer
 from search.co_moving import CoMovementPattern
-from search.rest import sliding_window, state_sliding
+from search.rest import state_sliding
 from search.verifier import len_filter
 
 
 class NaiveSliding:
     def __init__(self, frames, win_len, obj_ver, dfilter):
-        self.wins_iter = sliding_window(frames, win_len)
+        self.frames = frames
         self.olen_m, self.label_m = Counter(), {}
         self.len_filter = partial(len_filter, self.olen_m, win_len)
         self.obj_ver = obj_ver
@@ -41,21 +42,25 @@ class NaiveSliding:
             del self.label_m[obj]
 
     def __iter__(self):
-        if (win := next(self.wins_iter, None)) is None:
-            return
-        low, high = win[0][0], win[-1][0]
-        for _, objs in win:
+        frames_iter = iter(self.frames)
+        win_len = self.win_len
+        win = deque(maxlen=win_len)
+        for fid, objs in islice(frames_iter, win_len):
+            objs = self.dfilter(objs)
+            win.append((fid, objs))
             self._update(objs)
+        low, high = win[0][0], win[-1][0]
         if candi := self._filter(low, high):
             yield candi
 
         abandoned = win[0][1]['oid']
-        for win in self.wins_iter:
-            self._subtract(abandoned[abandoned.isin(self.olen_m)])
-
-            fid, objs = win[-1]
-            low = win[0][0]
+        for fid, objs in frames_iter:
+            objs = self.dfilter(objs)
+            win.append((fid, objs))
+            self._subtract(abandoned)
             self._update(objs)
+
+            low = win[0][0]
             if candi := self._filter(low, fid):
                 yield candi
             abandoned = win[0][1]['oid']
