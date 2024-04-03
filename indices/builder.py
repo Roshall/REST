@@ -17,7 +17,7 @@ def build_tempo_spatial_index(trajs, cfg):
 
     for tid, beg, cls_id, track in trajs:
         pos = reg.index(track)
-        break_points = np.flatnonzero(np.diff(pos, prepend=-1))
+        break_points = np.flatnonzero(np.diff(pos, prepend=-1, append=-1))
         spt_idx = user_idx[cls_id]
         track_lifelong = len(track)
         for start, end in pairwise(break_points):
