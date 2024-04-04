@@ -1,10 +1,27 @@
-from collections import namedtuple
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Sequence, NamedTuple
 
-TrajTrack = namedtuple('TrajTrace', 'tId start_frame clsId track')
-RawTraj = namedtuple('RawTraj', 'fps life_long bbox traj_track')
-Traj_Meta = namedtuple('meta_key', 'duration loc')
+import numpy as np
+
+
+class TrajTrak(NamedTuple):
+    tId: int
+    start_frame: int
+    clsId: int
+    track: np.ndarray
+
+
+class RawTraj(NamedTuple):
+    fps: int
+    life_long: int
+    bbox: Sequence
+    traj_track: TrajTrak
+
+
+class TrajMeta(NamedTuple):
+    """ This class should be removed"""
+    duration: Sequence
+    loc: int
 
 
 @dataclass(slots=True)
