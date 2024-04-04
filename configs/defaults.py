@@ -17,7 +17,13 @@ _C.INDEX.REGION.TYPE = 'grid'
 
 _C.INDEX.REGION.GRID = CN()
 _C.INDEX.REGION.GRID.SPACE = (8, 6)
+_C.INDEX.REGION.GRID.AREA = (0, 1920, 0, 1080)
 
-_C.QUERY = 'index_one_pass'
-# _C.QUERY = 'index_base'
-# _C.QUERY = 'sliding_base'
+_C.DATA = CN()
+_C.DATA.SCALE = 1
+_C.DATA.STRIDE = 1
+
+_C.QUERY = ('index', 'one_pass')
+# _C.QUERY = ('index', 'base')
+# _C.QUERY = ('sliding', 'base')
+# _C.QUERY = ('sliding', 'state')
