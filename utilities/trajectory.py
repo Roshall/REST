@@ -40,6 +40,9 @@ class BasicTrajectorySeg:
     def __lt__(self, other):
         return self.begin < other.begin
 
+    def __eq__(self, other):
+        return self.begin == other.begin
+
 
 @dataclass(slots=True)
 class TrajectoryIntervalSeg(BasicTrajectorySeg):
