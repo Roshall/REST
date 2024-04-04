@@ -1,12 +1,12 @@
 from bisect import bisect_right
 import numpy as np
 
-from utilities.config import config
+from utilities.data_preprocessing import gen_border
 
 
 class GridRegion:
-    def __init__(self):
-        self.borders = config.gird_border
+    def __init__(self, cfg):
+        self.borders = gen_border(cfg.INDEX.REGION.GRID.AREA, cfg.INDEX.REGION.GRID.SPACE)
         # this marker marks the starting point of each grid, while $borders
         # contains the end corners, thus removing the last element
         self.terr_marker = [dim[:-1] for dim in self.borders]

@@ -11,7 +11,7 @@ from utilities.trajectory import TrajectorySequenceSeg
 def build_tempo_spatial_index(trajs, cfg):
     # 1. find trajectory's region
     # config.gird_border = gen_border(trajs.bbox, 10, 15)
-    reg = GridRegion()
+    reg = GridRegion(cfg)
     UserIdx = get_user_indices(cfg)
     user_idx = defaultdict(UserIdx)
 
@@ -24,5 +24,4 @@ def build_tempo_spatial_index(trajs, cfg):
             ts_beg = start + beg
             spt_idx.add(((track[start], track_lifelong), (end - start, ts_beg)),
                         TrajectorySequenceSeg(tid, ts_beg, cls_id, track[start:end]))
-
     return user_idx
