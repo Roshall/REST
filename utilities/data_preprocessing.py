@@ -7,22 +7,24 @@ def view_field(object_tb, x_name, y_name, scale=1):
     return np.array((X.min(), X.max(), Y.min(), Y.max()), dtype=np.int32) * scale
 
 
-def traj_data(tracks, cols_name: list, fps, label_map, scale=100):
+def traj_data(tracks, cols_name: list, label_map, stride, scale=100):
     """
     load objects data to trajectory entry.
     :param tracks: pandas data frame of tracks
     :param cols_name: [track_id, frame_id, x, y] are wanted, supply their actual properties name in order.
-    :param fps: integer
+    :param stride: integer
     :param label_map: map traj id to its label
-    :param scale: the unit of our coordinate is 'cm', tell us how we scale raw (x, y).
-    :return: trajectories tuple with format ('TrajTrace', 'tId start_frame track') and points of all trajectories.
+    :param scale:  scale raw (x, y).
+    :return: generate of TrajTrace.
     """
     tracks = tracks[cols_name]
     traces_by_id = tracks.groupby(cols_name[0])
     for tid, t in traces_by_id:
         cls_id = label_map[tid]
         start_frame = t[cols_name[1]].iat[0]
-        trajs = (t[cols_name[-2:]][::fps].to_numpy() * scale).astype(np.int32)
+        trajs = t[cols_name[-2:]][::stride].to_numpy(copy=True)
+        if scale != 1:
+            trajs *= scale
         yield tid, start_frame,  cls_id,  trajs
 
 
