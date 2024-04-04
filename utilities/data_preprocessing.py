@@ -53,32 +53,46 @@ def group_by_frame(df, interval):
     return df.groupby('fid')
 
 
-def traj_interp(np_arr, center=False):
+def traj_interp(np_arr, center=True):
     import pandas as pd
 
     np_arr[:, 3] += np_arr[:, 5]
     np_arr[:, 3] //= 2
     if center:
-        np_arr[:, 6] += np_arr[:, 4]
-        np_arr[:, 6] //= 2
+        np_arr[:, 4] += np_arr[:, 6]
+        np_arr[:, 4] //= 2
 
     header = ['oid', 'cls', 'fid', 'x', 'y']
     # sort by oid
-    np_arr = np_arr[:, [0, 1, 2, 3, 6]][np.argsort(np_arr[:, 0])]
+    np_arr = np_arr[np.argsort(np_arr[:, 0]), :5]
     # group by objects
-    diff = np.diff(np_arr[:, 0], prepend=np_arr[0, 0]).nonzero()[0]
+    diff = np.flatnonzero(np.diff(np_arr[:, 0], prepend=np_arr[0, 0]))
     group_by_id = np.split(np_arr, diff)
-    interp_ls = []
-    for group in group_by_id:
-        df_interp = pd.DataFrame(group, columns=header)
-        min_, max_, mode = df_interp['fid'].min(), df_interp['fid'].max(), df_interp['cls'].mode()[0]
-        df_interp['cls'] = mode  # revise class id
-        df_interp = df_interp.set_index('fid').reindex(np.arange(int(min_), int(max_) + 1))
-        if df_interp['x'].isna().values.any():  # interpolate
-            df_interp.interpolate(inplace=True)
-        interp_ls.append(df_interp.reset_index())
-    df = pd.concat(interp_ls, ignore_index=True, copy=False)
-    return df.astype({'oid': np.int32, 'cls': np.int16, 'x': np.int32, 'y': np.int32})
+    id_num = len(group_by_id)
+    print('total #id:', id_num, '\n')
+    interp_ls = [None] * id_num
+    for i, group in enumerate(group_by_id):
+        fids = group[:, 2]
+        min_, max_, = np.min(fids), np.max(fids)
+        vals, counts = np.unique(group[:, 1], return_counts=True)
+        mod = vals[np.argmax(counts)]  # mode as revised class id
+        if len(group) != max_ - min_ + 1:  # interpolate
+            interp_fids = np.arange(min_, max_+1)
+            interp = np.empty((len(interp_fids), len(header)), dtype=np.int32)
+            interp[:, 0] = group[0, 0]
+            interp[:, 2] = interp_fids
+            for col in range(3, 5):
+                interp[:, col] = np.interp(interp_fids, fids, group[:, col])
+        else:
+            interp = group
+        interp[:, 1] = mod  # revise class id
+
+        interp_ls[i] = interp
+        if i % 1000 == 0:
+            print(f'\r{i}/{id_num}', end='')
+    print('merging...')
+    merged = np.concatenate(interp_ls)
+    return pd.DataFrame(merged, columns=header).astype(dict(zip(header, (np.int32, np.uint8, np.int32, np.uint16, np.uint16))))
 
 
 if __name__ == '__main__':
