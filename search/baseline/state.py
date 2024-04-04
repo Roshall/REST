@@ -1,3 +1,4 @@
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from itertools import islice
 
@@ -14,9 +15,10 @@ def state_slider(frames: Iterable, win_len, obj_verifier, dfilter):
 def pat_wrapper(frames, obj_verifier, dfilter):
     for fid, objs in frames:
         objs = dfilter(objs)
-        objs = objs.set_index('oid')['cls'].to_dict()['cls']
-        if obj_verifier(objs.keys()):
-            yield CoMovementPattern(objs, [fid, fid])
+        if not objs.empty:
+            objs = objs.set_index('oid')['cls'].to_dict()
+            if obj_verifier(Counter(objs.values())):
+                yield CoMovementPattern(objs, [fid, fid])
 
 
 def state_maintain(win_len):
