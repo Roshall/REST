@@ -1,10 +1,8 @@
 import numpy as np
 
 
-def view_field(object_tb, x_name, y_name, scale=1):
-    X = object_tb[x_name]
-    Y = object_tb[y_name]
-    return np.array((X.min(), X.max(), Y.min(), Y.max()), dtype=np.int32) * scale
+def view_field(xy):
+    return np.vstack((xy.min(), xy.max())).T.flatten()
 
 
 def traj_data(tracks, cols_name: list, label_map, stride, scale=100):
