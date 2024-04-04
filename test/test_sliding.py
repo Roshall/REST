@@ -32,5 +32,5 @@ class TestSliding:
         sliding = NaiveSliding(self.frames, self.duration, self.obj_verifier, self.dfilter)
         res = list(state_sliding(sliding, self.obj_verifier, base_maintainer))
 
-        assert res == ans
+        assert res == [pat.to_plain() for pat in ans]
 

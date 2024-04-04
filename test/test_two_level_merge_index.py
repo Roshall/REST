@@ -3,7 +3,7 @@ from functools import partial
 from btree import BtreeMap, BtreeMultiMap
 
 from indices.region import GridRegion, unsure
-from test.test_helper import *
+from test.region_test_vars import *
 from indices.two_level_merge_index import TwoLevelMergeIndex
 
 

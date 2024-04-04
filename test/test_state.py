@@ -25,7 +25,6 @@ def test_state_maintain():
     assert list(fruits) == mocks[1:2] and list(remain) == mocks[2:]
 
 
-
 def test_state_slider():
     assert False
 
