@@ -32,13 +32,15 @@ class GridRegion:
         return self.territory[self._point2idx(loc)]
 
     def index(self, locs):
-        mask = np.ones(locs.shape[0], dtype=bool)
-        loc_t = locs.T
-        for dim_grid, dim_point in zip(self.borders, loc_t):
-            mask &= (dim_point >= dim_grid[0]) | (dim_point <= dim_grid[-1])
-        assert mask.all()
+        # check locs borders ####
+        # loc_t = locs.T
+        # mask = np.ones(locs.shape[0], dtype=bool)
+        # for dim_grid, dim_point in zip(self.borders, loc_t):
+        #     mask &= (dim_point >= dim_grid[0]) | (dim_point <= dim_grid[-1])
+        # assert mask.all()
+        # ################
         res = np.zeros(locs.shape[0], dtype=np.int32)
-        for i, (dim_grid, dim_point) in enumerate(zip(self.borders, loc_t)):
+        for i, (dim_grid, dim_point) in enumerate(zip(self.borders, locs.T)):
             res += (np.searchsorted(dim_grid, dim_point, side='right') - 1) * (len(dim_grid) if i < 1 else 1)
         return res
 
@@ -58,7 +60,7 @@ class GridRegion:
         candidate_slice = []
         for dim_grid in self.borders:
             border_min = next(bbox_iter)
-            cand_min = bisect_right(dim_grid, border_min) - 1
+            cand_min = np.searchsorted(dim_grid, border_min, side='right') - 1
             if dim_grid[cand_min] == border_min:  # is the border grid surely within the bbox?
                 prob_min = cand_min
             else:
