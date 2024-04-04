@@ -26,8 +26,9 @@ def traj_data(tracks, cols_name: list, label_map, stride, scale=100):
         yield tid, start_frame,  cls_id,  trajs
 
 
-def gen_border(bbox, x_num, y_num):
+def gen_border(bbox, xy_num):
     xmin, xmax, ymin, ymax = bbox
+    x_num, y_num = xy_num
     x_series = np.linspace(xmin, xmax, x_num, dtype=int)
     x_series = np.append(x_series, x_series[-1]+1)
     y_series = np.linspace(ymin, ymax, y_num, dtype=int)
@@ -97,12 +98,13 @@ def traj_interp(np_arr, center=True):
 
 if __name__ == '__main__':
     from utilities import dataset
-    import os
 
-    file_path = '/home/lg/VDBM/spatiotemporal/resource/dataset'
-    fps = 25
-    cls_map, data = dataset.load_rounD(file_path, '00')
-    cols = ['trackId', 'frame', 'xCenter', 'yCenter']
-    raw_traj = traj_data(data, cols, fps, cls_map)
-    XY = data[cols[-2:]].to_numpy()
-    draw_traj_point_in_grid(XY, gen_border(raw_traj.bbox, 10, 15))
+    # file_path = '/home/lg/VDBM/spatiotemporal/resource/dataset'
+    # cls_map, data = dataset.load_rounD(file_path, '00')
+    # cols = ['trackId', 'frame', 'xCenter', 'yCenter']
+    filename = '../../resource/dataset/traj_taipei_0412.pkl'
+    fps = 30
+    data, cols, cls_map = dataset.load_yolo_for(filename)
+    XY = data[cols[-2:]]
+    XY = XY[::30]
+    draw_traj_point_in_grid(XY, gen_border(view_field(XY), (10, 15)))

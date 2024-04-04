@@ -8,7 +8,7 @@ from utilities.data_preprocessing import traj_data, gen_border, view_field
 def grid_spt_tempo_idx_fake_data(cfg):
     data, cols, cls_map, = dataset.load_fake()
     trajs = traj_data(data, cols, cls_map, 1, 1)
-    broders = gen_border(view_field(data, *cols[-2:]), 5, 6)
+    broders = gen_border(view_field(data[cols[-2:]]), (5, 6))
     config.gird_border = broders
     return build_tempo_spatial_index(trajs, cfg)
 
