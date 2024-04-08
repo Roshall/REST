@@ -39,7 +39,7 @@ class TestBaseSliding(object):
     def test_final(self):
         self.setup()
         ans = [((0,1), [1,4]), ((0, 2, 3), [5, 9]), ((0, 3), [5, 15]), ((0, 4, 5), [15, 20])]
-        res = [(tuple(pat.labels), pat.interval) for pat in state_sliding(self.sliding, self.label_verifier, base_maintainer)]
+        res = [(tuple(ids), [b, s]) for ids, b, s in state_sliding(self.sliding, self.label_verifier, base_maintainer)]
         assert res == ans
 
 
@@ -48,9 +48,9 @@ def test_base_search():
     spt_tempo = grid_spt_tempo_idx_fake_data(cfg)
 
     test1, test2 = query4test()
-    res = [(frozenset(pat.labels), *pat.interval) for pat in base_search(spt_tempo, *test1)]
+    res = [(frozenset(ids), s, e) for ids, s, e in base_search(spt_tempo, *test1)]
     assert res == [(frozenset([2, 3, 1]), 5, 10), (frozenset([3, 1]), 4, 10), (frozenset([1]), 1, 10)]
 
-    res = [(frozenset(pat.labels), *pat.interval) for pat in base_search(spt_tempo, *test2)]
+    res = [(frozenset(ids), s, e) for ids, s, e in base_search(spt_tempo, *test2)]
     assert res == [(frozenset([5, 1, 3]), 9, 18), (frozenset([2, 4, 5, 3]), 11, 20), (frozenset([2, 4, 3]), 11, 22)]
 

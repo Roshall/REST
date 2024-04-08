@@ -3,7 +3,7 @@ import math
 from collections import Counter
 from collections.abc import Mapping
 from functools import partial
-from itertools import chain, groupby, islice
+from itertools import chain, groupby, islice, batched
 from operator import attrgetter
 
 import numpy as np
@@ -25,25 +25,21 @@ def absorb(trajectories: Mapping[int, Trajectory], duration):
     for tid, traj in trajectories.items():
         seq = traj.seg
         if len(seq) > 2:
-            seq = np.array(traj.seg)
             seq.sort()
-            # When we cut a trajectory, the end point doesn't actually belong to the segment
-            # so if two segments are adjacent, one's end == another begin.
-            mid = seq[1:-1].reshape(-1, 2)
-            remains = mid[np.flatnonzero(mid[:, 1] - mid[:, 0])].reshape(-1)
-            if len(remains) > 0:
-                res = np.empty(remains.size + 2, dtype=np.int32)
-                res[[0, -1]] = seq[[0, -1]]
-                res[1:-1] = remains
-                res = res.reshape(-1, 2)
-                res[:, 1] -= res[:, 0]  # length
-                yield from (TrajectoryIntervalSeg(tid, beg, traj.label, l)
-                            for beg, l in res if l >= duration)
-                continue
-
-        s_len = seq[-1] - seq[0]
-        if s_len >= duration:
-            yield TrajectoryIntervalSeg(tid, seq[0], traj.label, s_len)
+            beg = seq[0]
+            for a, b in batched(islice(seq, 1, len(seq)-1), n=2):
+                if a != b:
+                    s_len = a - beg
+                    if s_len >= duration:
+                        yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len)
+                    beg = b
+            s_len = seq[-1] - beg
+            if s_len >= duration:
+                yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len)
+        else:
+            s_len = seq[-1] - seq[0]
+            if s_len >= duration:
+                yield TrajectoryIntervalSeg(tid, seq[0], traj.label, s_len)
 
 
 class BaseSliding:
