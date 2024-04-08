@@ -19,6 +19,7 @@ def traj_data(tracks, cols_name: list, label_map, stride, scale=100):
     traces_by_id = tracks.groupby(cols_name[0])
     for tid, t in traces_by_id:
         cls_id = label_map[tid]
+        t = t.sort_values(by='fid')
         start_frame = t[cols_name[1]].iat[0]
         trajs = t[cols_name[-2:]][::stride].to_numpy(copy=True)
         if scale != 1:
