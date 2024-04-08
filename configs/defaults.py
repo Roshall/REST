@@ -23,6 +23,8 @@ _C.DATA = CN()
 _C.DATA.SCALE = 1
 _C.DATA.STRIDE = 1
 
+_C.BOX_NP = True
+
 _C.QUERY = ('index', 'one_pass')
 # _C.QUERY = ('index', 'base')
 # _C.QUERY = ('sliding', 'base')
