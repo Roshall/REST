@@ -73,8 +73,10 @@ def traj_interp(np_arr, center=True):
     print('total #id:', id_num, '\n')
     interp_ls = [None] * id_num
     for i, group in enumerate(group_by_id):
+        group = group[np.argsort(group[:, 2])]
         fids = group[:, 2]
-        min_, max_, = np.min(fids), np.max(fids)
+
+        min_, max_, = fids[[0, -1]]
         vals, counts = np.unique(group[:, 1], return_counts=True)
         mod = vals[np.argmax(counts)]  # mode as revised class id
         if len(group) != max_ - min_ + 1:  # interpolate
@@ -102,7 +104,7 @@ if __name__ == '__main__':
     # file_path = '/home/lg/VDBM/spatiotemporal/resource/dataset'
     # cls_map, data = dataset.load_rounD(file_path, '00')
     # cols = ['trackId', 'frame', 'xCenter', 'yCenter']
-    filename = '../../resource/dataset/traj_taipei_0412.pkl'
+    filename = '/media/cw/DataSet/Dataset/detection_results/order_florida5h.pkl'
     fps = 30
     data, cols, cls_map = dataset.load_yolo_for(filename)
     XY = data[cols[-2:]]
