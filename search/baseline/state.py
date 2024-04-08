@@ -32,7 +32,7 @@ def state_maintain(win_len):
         # that's why min(valid_ptr, count)
         fruits = islice(prev_iter, min(valid_ptr, count), count if absort else None)
         if absort and count < valid_ptr:
-            if win_len - (end - prev[valid_ptr - 1].start) < 1:  # check if we can recede pointer
+            if win_len - (end - prev[valid_ptr - 1].start) <= 1:  # check if we can recede pointer
                 valid_ptr -= 1
             valid_ptr += len(new) - count
         else:
