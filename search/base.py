@@ -64,13 +64,16 @@ class BaseSliding:
 
         for ts, trajs in self.ts_grouped_traj:
             if (end := ts + self.dur - 1) >= terminal:
+                if self.end_q:
+                    for ts_end, group in self.eq_group_pop(terminal - 1):
+                        yield from self.end_point_pat_check(ts_end, group)
                 if end == terminal:
                     self._add(trajs)
                 yield from self.start_point_pat_check([terminal - self.dur + 1, terminal])
                 break
 
             if self.end_q and end > self.end_q[0][0]:
-                for ts_end, group in self.eq_group_pop(end):
+                for ts_end, group in self.eq_group_pop(end-1):
                     yield from self.end_point_pat_check(ts_end, group)
 
             if end > self.last_win_hi and self.label_verifier(Counter(self.label_m.values())):
@@ -117,7 +120,7 @@ class BaseSliding:
                 for tra in trajs:
                     if start + tra.len > self.dur:
                         self.label_m[tra.id] = tra.label
-                        self.end_q.append((tra.len + tra.begin - 1, tra.id))
+                        self.eq_push((tra.len + tra.begin - 1, tra.id))
         else:
             return
         self.ts_grouped_traj = chain([(ts, trajs)], ts_grouped_traj)
