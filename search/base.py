@@ -55,8 +55,11 @@ class BaseSliding:
         self.last_win_hi = 0
 
     def __iter__(self):
-        terminal = self.interval[1]
+        start, terminal = self.interval
         self._init_state()
+
+        if self.end_q:  # first sliding result
+            yield from self.start_point_pat_check([start, self.last_win_hi])
 
         for ts, trajs in self.ts_grouped_traj:
             if (end := ts + self.dur - 1) >= terminal:
@@ -85,8 +88,12 @@ class BaseSliding:
         else:
             if self.end_q:
                 for ts_end, group in self.eq_group_pop(math.inf):
-                    end = min(terminal, ts_end)
-                    yield from self.end_point_pat_check(end, group)
+                    if ts_end >= terminal:
+                        group.extend(elem[1] for elem in self.end_q)
+                        yield from self.end_point_pat_check(terminal, group)
+                        break
+                    else:
+                        yield from self.end_point_pat_check(ts_end, group)
 
     def end_point_pat_check(self, end, stale_trajs):
         if self.label_verifier(Counter(self.label_m.values())):
@@ -119,10 +126,13 @@ class BaseSliding:
                         self.eq_push((tra.len + tra.begin - 1, tra.id))
         else:
             return
+
         self.ts_grouped_traj = chain([(ts, trajs)], ts_grouped_traj)
-        self.last_win_hi = ts + self.dur - 1
+        self.last_win_hi = (start if self.end_q else ts) + self.dur - 1
 
     def start_point_pat_check(self, interval=None):
+        # This is a generator that the caller don't need to check
+        # anything. Just yield from.
         if self.label_verifier(Counter(self.label_m.values())):
             yield CoMovementPattern(self.label_m.copy(), interval)
 
