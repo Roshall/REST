@@ -25,7 +25,7 @@ class SequentialSearcher:
         for t, group in group_until(self.etq, ts):
             if t < ts:
                 yield from self.verify(t, [self.playground[tid] for tid in group])
-            elif t == ts:
+            else:  # t == ts
                 t_candi = []
                 for tid in group:
                     if (revising := pre_insert.pop(tid, None)) is None:
@@ -45,17 +45,15 @@ class SequentialSearcher:
 
     def _init_state(self):
         start = self.interval[0]
-        seen = set()
         for ts, trajs in self.ts_grouped_traj:  # gather trajs on the starting border
             for traj in trajs:
-                if traj.id not in seen:  # rear case: two identical traj
-                    self.etq_push((traj.begin + traj.len, traj.id))
-                    seen.add(traj.id)
                 if ts < start:
                     (traj := copy(traj)).begin = start
                 self.playground[traj.id] = traj
             if ts > start:
                 break
+        for tid, traj in self.playground.items():
+            self.etq_push((traj.begin + traj.len, tid))
 
     def __iter__(self):
         begin, finish = self.interval
@@ -66,6 +64,8 @@ class SequentialSearcher:
             return
 
         for t, group in self.ts_grouped_traj:
+            if t > finish:
+                break
             pre_insert = {traj.id: traj for traj in group}
             if next_end <= t:
                 yield from self._yield_until(t, pre_insert)
