@@ -2,7 +2,7 @@ import heapq
 from collections import Counter, deque
 from collections.abc import Iterable, MutableMapping, Callable
 from collections.abc import Mapping, Sequence
-from itertools import takewhile, islice
+from itertools import takewhile, islice, pairwise
 from operator import attrgetter
 
 import numpy as np
@@ -33,27 +33,35 @@ def yield_co_move(duration: int, labels: Mapping[int, int], active_space: Mutabl
     traj_cand = [traj for traj in takewhile(lambda traj: timestamp - traj.begin >= duration, active_space.values())]
     for traj in traj_required:
         del active_space[traj.id]
-
-    result_bag = Counter(map(attrgetter('label'), traj_cand))
     ids = [traj.id for traj in traj_cand]
+    cls = [traj.label for traj in traj_cand]
+    begins = [traj.begin for traj in traj_cand]
+    result_bag = Counter(cls)
 
     # It's impossible for result bag to have more label types. because we filtered labels first.
     assert len(result_bag) <= len(labels)
     if len(result_bag) == len(labels):
-        for tra_label in labels:
-            if result_bag[tra_label] < labels[tra_label]:
+        result_bag.subtract(labels)
+        for l_num in result_bag.values():
+            if l_num < 0:
                 return
-        res_pos = np.flatnonzero(np.diff(np.fromiter(map(attrgetter('begin'), traj_cand),
-                                         np.int32, len(traj_cand)), append=-1))
+        res_pos = np.flatnonzero(np.diff(begins, append=-1))+1
         timestamp -= 1  # the end point is exclusive
-        for i in res_pos[::-1]:  # start at the least duration
-            traj = traj_cand[i]
-            yield ids[:i+1], traj.begin, timestamp
-            label = traj.label
-            result_bag[traj.label] -= 1
-            id_required.discard(traj.id)
-            if not id_required or result_bag[label] < labels[label]:
+        for i, p in pairwise(res_pos[::-1]):  # start at the least duration
+            yield ids[:i], begins[i-1], timestamp
+            for oid in islice(ids, p, i):
+                id_required.discard(oid)
+            if not id_required:
                 break
+            result_bag.subtract(islice(cls, p, i))
+            for l_num in result_bag.values():
+                if l_num < 0:
+                    return
+        else:
+            if len(res_pos) != 0:
+                yield ids[:res_pos[0]], begins[0], timestamp
+            else:
+                yield ids, begins[0], timestamp
 
 
 def group_until(queue, ts):
@@ -95,7 +103,7 @@ def df_filter(df, reg_verifier, target_label):
 
 def state_sliding(pat_series: Iterable[CoMovementPattern],
                   obj_verifier,
-                  state_maintainer: Callable[[int, Sequence, Sequence, int, bool], [Iterable, Iterable]])\
+                  state_maintainer: Callable[[int, Sequence, int, int, bool], [Iterable, Iterable]])\
         -> Iterable[CoMovementPattern]:
     # $prev stores seen patterns. Every pattern is a set of objs that co-moves a certain period
     # Note that in terms of object set, prev[0] ⊃ prev[1] ⊃ prev[2] ⊃ ...
@@ -139,8 +147,8 @@ def state_sliding(pat_series: Iterable[CoMovementPattern],
             else:
                 new.append(cur)
 
-        fruits, prev_iter = state_maintainer(cur_end, prev, new, count, absort)
         prev_end = prev[0].end
+        fruits, prev_iter = state_maintainer(prev_end, prev, len(new), count, absort)
         for pat in fruits:
             pat.end = prev_end
             yield pat.to_plain()
@@ -149,7 +157,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern],
         prev = new
 
     if prev:
-        fruits, _ = state_maintainer(0, prev, [], len(prev), False)
+        fruits, _ = state_maintainer(0, prev, 0, len(prev), False)
         prev_end = prev[0].end
         for pat in fruits:
             pat.end = prev_end
