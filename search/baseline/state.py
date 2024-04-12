@@ -22,21 +22,28 @@ def pat_wrapper(frames, obj_verifier, dfilter):
 
 
 def state_maintain(win_len):
-    valid_ptr: int = 0
+    valid_ptr: int = 1
+    win_len -= 1  # end - start = w_Len = 1
 
-    def inner(end, prev: Sequence, new: Sequence, count: int, absort: bool):
+    def inner(prev_end, prev: Sequence, new_len: int, count: int, absort: bool):
         nonlocal valid_ptr
         prev_iter = iter(prev)
+        # check if we can move prev's valid pointer upwards
+        least_start = prev_end - win_len
+        while valid_ptr != 0 and least_start >= prev[valid_ptr-1].start:
+            valid_ptr -= 1
         # fruits is in [valid_ptr, count) if absort or [valid_ptr, len(prev))
         # in case that count <= valid_ptr, no fruit can be yielded, but we must only advance iterator to `count`
         # that's why min(valid_ptr, count)
-        fruits = islice(prev_iter, min(valid_ptr, count), count if absort else None)
-        if absort and count < valid_ptr:
-            if win_len - (end - prev[valid_ptr - 1].start) <= 1:  # check if we can recede pointer
-                valid_ptr -= 1
-            valid_ptr += len(new) - count
+        if absort:
+            fruits = islice(prev_iter, min(valid_ptr, count), count)
+            if count < valid_ptr:
+                valid_ptr += new_len - count
+            else:
+                valid_ptr = new_len
         else:
-            valid_ptr = len(new)
+            fruits = islice(prev_iter, valid_ptr, None)
+            valid_ptr = new_len
         return fruits, prev_iter
 
     return inner
