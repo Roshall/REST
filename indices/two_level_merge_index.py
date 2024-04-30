@@ -54,7 +54,7 @@ def intersect_not_sure_search(outer_idx, bboxes):
 def intersect_fuzzy_inner_all(outer_idx, bboxes):
     """
     :param outer_idx: the top level index.
-    :param bboxes: (dim0_min, dim0_max, dim1_min, dim1_max, ...).
+    :param bboxes: (min, max).
     :return: a generator that iterates inner search result as a whole set with the linear constraints.
     """
     lo, hi = bboxes
