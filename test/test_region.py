@@ -2,6 +2,7 @@ import numpy as np
 
 from indices.region import GridRegion, Out3DRegion
 from test.region_test_vars import *
+from utilities.trajectory import TrajMeta
 
 
 class TestGrid:
@@ -52,7 +53,7 @@ class Test3DRegion:
 
     def test_add(self):
         objs = [list(range(5)), {i: str(i) for i in range(4)}]
-        keys = [Traj_Meta(102, (19, 47)), Traj_Meta(5, (17, 55))]
+        keys = [TrajMeta(102, (19, 47)), TrajMeta(5, (17, 55))]
         for key, entry in zip(keys, objs):
             self.index.add(key, entry)
             assert self.index.where_contain(key) is entry

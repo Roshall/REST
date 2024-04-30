@@ -35,7 +35,7 @@ class TestTempSpatialIndex:
         assert res == [([1, 3, 2], 5, 10), ([1, 3], 4, 10), ([1], 1, 10)]
 
         res = list(one_pass_search(self.tempo_spatial, *test2))
-        assert res == [([3, 1, 5], 9, 18), ([3, 5, 4, 2], 11, 20), ([3, 4, 2], 11, 22)]
+        assert res == [([1, 3, 5], 9, 18), ([3, 5, 4, 2], 11, 20), ([3, 4, 2], 11, 22)]
 
 
 def test_verify_seg():
@@ -71,18 +71,36 @@ def test_candidate_verified_queue():
 
 def test_yield_co_move():
     duration = 5
-    obj_info = [(1, 0), (4, 1), (8, 1), (9, 2), (10, 0), (11, 0)]
+
+    #     1
+    # 0:  |-------------------| label: 0
+    #     1
+    # 1:  |-------------------| label: 2
+    #        4
+    # 2:     |----------------| label: 1 *
+    #           8
+    # 3:        |-------------| label: 1 *
+    #            9
+    # 4:         |------------| label: 2
+    #            10
+    # 5:          |-----------| label: 0 *
+    #             10
+    # 6:          |-----------| label: 0
+    #             11
+    # 7:           |----------| label: 0 x
+
+    obj_info = [(1, 0), (1, 2), (4, 1), (8, 1), (9, 2), (10, 0), (10, 0), (11, 0)]
     obj_info = [BasicTrajectorySeg(i, *info)for i, info in enumerate(obj_info)]
     active_space = dict(enumerate(obj_info))
     ts = 15
-    ids = [active_space[i] for i in (1, 2, 4)]
+    trajs = [active_space[i] for i in (2, 3, 5)]
 
-    label_quizzes = [{0: 2, 1: 2, 2: 1}, {0: 3, 1: 1, 2: 1}, {0: 1, 1: 1, 2: 1}]
+    label_quizzes = [{0: 2, 1: 2, 2: 1}, {0: 3, 1: 1, 2: 1}, {0: 1, 1: 1, 2: 1}, {0: 1, 1: 0, 2: 1}]
 
-    ans = [1, 0, 2]
+    ans = [1, 1, 4, 4]
     for labels, a in zip(label_quizzes, ans):
         test_map = dict(active_space)
-        res = list(yield_co_move(duration, labels, test_map, ts, ids))
+        res = list(yield_co_move(duration, labels, test_map, ts, trajs))
         assert len(res) == a
 
 
