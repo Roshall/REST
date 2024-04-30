@@ -1,4 +1,3 @@
-import pickle
 from zipfile import ZipFile
 
 import pandas as pd
@@ -28,6 +27,5 @@ def load_fake():
 
 def load_yolo_for(filename):
     columns = ['oid', 'fid', 'x', 'y']
-    with open(filename, 'rb') as f:
-        data = pickle.load(f)
+    data = pd.read_pickle(filename)
     return data, columns, data[['oid', 'cls']].drop_duplicates('oid').set_index('oid')['cls']
