@@ -5,7 +5,7 @@ def view_field(xy):
     return np.vstack((xy.min(), xy.max())).T.flatten()
 
 
-def traj_data(tracks, cols_name: list, label_map, stride, scale=100):
+def traj_data(tracks, cols_name: list, label_map, stride, scale=100, cls = None):
     """
     load objects data to trajectory entry.
     :param tracks: pandas data frame of tracks
@@ -13,15 +13,21 @@ def traj_data(tracks, cols_name: list, label_map, stride, scale=100):
     :param stride: integer
     :param label_map: map traj id to its label
     :param scale:  scale raw (x, y).
+    :param cls: which classes we want to use
     :return: generate of TrajTrace.
     """
     tracks = tracks[cols_name]
+    if cls is not None:
+        tracks = tracks[tracks['cls'].isin(cls)]
     traces_by_id = tracks.groupby(cols_name[0])
     for tid, t in traces_by_id:
         cls_id = label_map[tid]
         t = t.sort_values(by='fid')
         start_frame = t[cols_name[1]].iat[0]
-        trajs = t[cols_name[-2:]][::stride].to_numpy(copy=True)
+        if stride > 1:
+            trajs = t[cols_name[-2:]][::stride].to_numpy(copy=True)
+        else:
+            trajs = t[cols_name[-2:]].to_numpy(copy=True)
         if scale != 1:
             trajs *= scale
         yield tid, start_frame,  cls_id,  trajs
