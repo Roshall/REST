@@ -9,48 +9,67 @@ from index_w import PyRestIndex
 
 from utilities.data_preprocessing import traj_data
 from utilities.dataset import load_yolo_for
+from utilities.key import generate_key
 
 
-def load_traj_seg(border_stride, dataset_name, cls_list, cfg):
-    filename = f'{dataset_name}_{border_stride}'.replace('(', '').replace(')', '').replace(' ', '').replace(',', '_')
-    file_path = os.path.join(cfg.INDEX.CONFIG_PATH, filename)
+def load_traj_seg(border_stride, fname, dataset_name, cfg):
+    filename = f'{dataset_name}_{border_stride[0]}'.replace('(', '').replace(')', '').replace(' ', '').replace(',', '_')
+    filename = generate_key(filename)
+    file_path = os.path.join(cfg.INDEX.CONFIG_PATH, f'{dataset_name}_traj.pkl')
     if os.path.exists(file_path):
         with open(file_path, 'rb') as f:
             trajs = pickle.load(f)
     else:
-        df, cols, cls_m = load_yolo_for(os.path.join(cfg.DATA.PATH, dataset_name))
-        trajs = traj_data(df, cols, cls_m, cls_list)
-        reg = Grid(border_stride)
-        trajs = save_traj_seg(df, reg, file_path)
-    return trajs
+        df, cols, cls_m = load_yolo_for(fname)
+        trajs_raw = traj_data(df, cols, cls_m, cfg.DATA.STRIDE, scale=cfg.DATA.SCALE, cls=list(border_stride))
+        trajs = save_traj(trajs_raw, file_path)
+    file_path = os.path.join(cfg.INDEX.CONFIG_PATH, f'{filename}.pkl')
+    if os.path.exists(file_path):
+        with open(file_path, 'rb') as f:
+            segs = pickle.load(f)
+    else:
+        segs = save_seg(trajs, border_stride, file_path)
+    return trajs, segs
 
 
 def build_rest(trajs, segs, border_m):
     idx_dic = {}
-    for i, traj, seg in enumerate(zip(trajs, segs)):
+    stride = border_m[0]['tempo_stride']
+
+    for i, (traj, seg) in enumerate(zip(trajs, segs)):
         beg = traj.begin
         label = traj.label
         if label not in idx_dic:
             border = border_m[label]
-            idx_dic[label] = PyRestIndex(border['reg_broder'], border['life_border'])
+            idx_dic[label] = PyRestIndex(border['border_stride'], border['life_border'])
         spt_idx = idx_dic[label]
         life_stride = border_m[label]['tempo_stride']
         traj_life = traj.points.shape[0]
         for start, end in pairwise(seg):
             ts_beg = start + beg
-            seg_life_pos = ((end - beg) // life_stride + 1) * life_stride - 1
-            spt_idx.add((seg.points[start], (traj_life, (seg_life_pos, ts_beg))), [i, beg, start, end])
+            seg_life_pos = ((end - start) // life_stride + 1) * life_stride - 1
+            spt_idx.add((traj.points[start], (traj_life, (seg_life_pos, ts_beg))), [i, ts_beg, end])
     return idx_dic
 
 
-def save_traj_seg(trajs, grid, save_path):
-    traj_l = []
+def save_seg(trajs, border_stride, save_path):
     seg_ls = []
-    for tid, beg, cls_id, track in trajs:
-        pos = grid.index(track)
+    grid_m = {}
+    for c, bs in border_stride.items():
+        grid_m[c] = Grid(bs)
+    for t in trajs:
+        pos = grid_m[t.label].index(t.points)
         break_points = np.flatnonzero(np.diff(pos, prepend=-1, append=-1))
-        traj_l.append(TrajectorySequenceSeg(tid, beg, cls_id, track))
         seg_ls.append(break_points)
     with open(save_path, 'wb') as f:
-        pickle.dump((traj_l, seg_ls), f)
-    return traj_l
+        pickle.dump(seg_ls, f)
+    return seg_ls
+
+
+def save_traj(trajs_raw, save_path):
+    traj_ls = [TrajectorySequenceSeg(tid, beg, cls_id, track) for tid, beg, cls_id, track in trajs_raw]
+    with open(save_path, 'wb') as f:
+        pickle.dump(traj_ls, f)
+    return traj_ls
+
+
