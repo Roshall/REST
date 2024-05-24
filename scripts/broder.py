@@ -20,31 +20,48 @@ def life_broder_cls_top(df, quantiles: tuple = ([0, 5000, 50000, 10000], [0.5, 0
 
 
 def region_border(df, cls: Iterable[int]):
-    reg_broder_by_cls = {}
+    reg_border_by_cls = {}
     for c in cls:
         df_cls = df.loc[df.cls == c]
-        reg_broder_by_cls[c] = list(map(int, view_field(df_cls[['x', 'y']])))
-    return reg_broder_by_cls
+        reg_border_by_cls[c] = list(map(int, view_field(df_cls[['x', 'y']])))
+    return reg_border_by_cls
 
 
 def border_meta(df, tempo_stride=60):
     broder = {}
     broder_by_cls = life_broder_cls_top(df)
-    reg_broder_by_cls = region_border(df, broder_by_cls)
+    reg_border_by_cls = region_border(df, broder_by_cls)
     for c, life_border in broder_by_cls.items():
-        broder[c] = {'life_border': life_border, 'reg_broder': reg_broder_by_cls[c],
+        border[c] = {'life_border': life_border, 'reg_border': reg_border_by_cls[c],
                      'tempo_stride': tempo_stride}
-    return broder
+    return border
+
+
+def border_stride(border, space):
+    border = np.asarray(border).reshape(-1, 2)
+    stride = (border[:, 1] - border[:, 0] - 1) // np.asarray(space) + 1
+    bor_st = list(border[0])
+    bor_st.append(stride[0])
+    bor_st.extend(border[1])
+    bor_st.append(stride[1])
+    return bor_st
+
+
+def load_ext_index_meta(fname):
+    import json
+    with open(fname) as f:
+        meta = json.load(f)
+    return {int(k): v for k, v in meta.items()}
 
 
 if __name__ == '__main__':
     from utilities import dataset
     import json
     from configs import cfg
-    path = '/home/lg/VDBM/spatiotemporal/regional_tempo_spatial_query/test'
-    filename = 'timsquare3h.pkl'
-    filepath = os.path.join(path, filename)
+    path = cfg.DATA.PATH
+    dataset_name = 'timesquare3h'
+    filepath = os.path.join(path, f'{dataset_name}.pkl')
     df, _, _ = dataset.load_yolo_for(filepath)
     border = border_meta(df)
-    filepath = os.path.join(cfg.INDEX.CONFIG_PATH, filename.split('.')[0] + '.json')
+    filepath = os.path.join(cfg.INDEX.CONFIG_PATH, dataset_name + '.json')
     json.dump(border, open(filepath, 'w'), indent=4)
