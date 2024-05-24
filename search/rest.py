@@ -1,4 +1,5 @@
 import heapq
+from bisect import bisect_left
 from collections import Counter, deque
 from collections.abc import Iterable, MutableMapping, Callable
 from collections.abc import Mapping, Sequence
@@ -23,14 +24,15 @@ def yield_co_move(duration: int, labels: Mapping[int, int], active_space: Mutabl
     :param traj_required: trajectories need processing
     :return: iterator of tuple(ids, start, end)
     """
-    id_required = set(traj.id for traj in traj_required if timestamp - traj.begin >= duration)
+    max_begin = timestamp - duration + 1
+    begin_min = min(map(attrgetter('begin'), traj_required))
 
-    if not id_required:
+    if begin_min >= max_begin:
         for traj in traj_required:
             del active_space[traj.id]
         return
 
-    traj_cand = [traj for traj in takewhile(lambda traj: timestamp - traj.begin >= duration, active_space.values())]
+    traj_cand = [traj for traj in takewhile(lambda traj: traj.begin < max_begin, active_space.values())]
     for traj in traj_required:
         del active_space[traj.id]
     ids = [traj.id for traj in traj_cand]
@@ -41,27 +43,28 @@ def yield_co_move(duration: int, labels: Mapping[int, int], active_space: Mutabl
     # It's impossible for result bag to have more label types. because we filtered labels first.
     assert len(result_bag) <= len(labels)
     if len(result_bag) == len(labels):
-        result_bag.subtract(labels)
+        for l in result_bag:
+            result_bag[l] -= labels[l]
         for l_num in result_bag.values():
             if l_num < 0:
                 return
-        res_pos = np.flatnonzero(np.diff(begins, append=-1))+1
         timestamp -= 1  # the end point is exclusive
-        for i, p in pairwise(res_pos[::-1]):  # start at the least duration
-            yield ids[:i], begins[i-1], timestamp
-            for oid in islice(ids, p, i):
-                id_required.discard(oid)
-            if not id_required:
-                break
-            result_bag.subtract(islice(cls, p, i))
-            for l_num in result_bag.values():
-                if l_num < 0:
-                    return
+
+        i = len(begins)
+        old = begins[-1]
+        for p in range(i - 1, bisect_left(begins, begin_min)-1, -1):
+            beg = begins[p]
+            if beg != old:
+                yield ids[:i], old, timestamp
+                for j in range(p+1, i):
+                    label = cls[j]
+                    result_bag[label] -= 1
+                    if result_bag[label] < 0:
+                        return
+                old = beg
+                i = p+1
         else:
-            if len(res_pos) != 0:
-                yield ids[:res_pos[0]], begins[0], timestamp
-            else:
-                yield ids, begins[0], timestamp
+            yield ids[:i], beg, timestamp
 
 
 def group_until(queue, ts):
