@@ -12,7 +12,7 @@ class Grid:
         self.col_num = box[0]
 
     def index(self, point):
-        pos = (point - self.lower_border)/self.stride
+        pos = (point - self.lower_border)//self.stride
         pos = pos[:, 1] * self.col_num + pos[:, 0]
         if (pos >= self.size).any():
             raise ValueError(f"points outside grid")
