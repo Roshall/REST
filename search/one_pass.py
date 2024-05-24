@@ -5,13 +5,14 @@ from functools import partial
 from itertools import chain, groupby
 from operator import attrgetter
 
+
 from search.rest import yield_co_move, group_until
 from search.verifier import candidate_verified_queue
 from utilities.box2D import Box2D
 from utilities.trajectory import TrajectoryIntervalSeg, TrajectorySequenceSeg
 
 
-class SequentialSearcher:
+class MaxDurFirst:
     def __init__(self, trajs: Iterable[TrajectoryIntervalSeg | TrajectorySequenceSeg], interval, verifier):
         self.ts_grouped_traj = groupby(trajs, attrgetter('begin'))
         self.interval = interval
@@ -46,11 +47,16 @@ class SequentialSearcher:
     def _init_state(self):
         start = self.interval[0]
         for ts, trajs in self.ts_grouped_traj:  # gather trajs on the starting border
-            for traj in trajs:
-                if ts < start:
-                    (traj := copy(traj)).begin = start
-                self.playground[traj.id] = traj
-            if ts > start:
+            if ts < start:
+                for traj in trajs:
+                    if traj.len + ts > start:
+                        traj.begin = start
+                        self.playground[traj.id] = traj
+            elif ts == start:
+                for traj in trajs:
+                    self.playground[traj.id] = traj
+            else:
+                self.ts_grouped_traj = chain(((ts, trajs),), self.ts_grouped_traj)
                 break
         for tid, traj in self.playground.items():
             self.etq_push((traj.begin + traj.len, tid))
