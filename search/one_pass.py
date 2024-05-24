@@ -84,13 +84,12 @@ class MaxDurFirst:
             yield from self.verify(finish, [self.playground[info[1]] for info in self.etq])
 
 
-def one_pass_search(tempo_spat_idx, region: Box2D, labels: Mapping, duration_range, interval):
-    # FIXME: only rectangle region
-    candidates, probation = zip(*(tempo_spat_idx[label].where_intersect(((region.bbox, duration_range), interval))
-                                  for label in labels))
-    traj_queue = heapq.merge(*chain.from_iterable(probation),
-                             candidate_verified_queue(heapq.merge(*chain.from_iterable(candidates)),
-                                                      region, duration_range[0]),
-                             key=attrgetter('begin'))
+def one_pass_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
+    spat_tempo_idx, trajs = data_pack
+    for c in labels:
+        if c not in spat_tempo_idx:
+            return iter([])
+    traj_it = heapq.merge(*(spat_tempo_idx[c].query(trajs, region.bbox, duration_range[0], interval, 1) for c in labels), key=attrgetter('begin'))
+    traj_it = candidate_verified_queue(traj_it, region, duration_range[0])
     verifier = partial(yield_co_move, duration_range[0], labels)
-    return SequentialSearcher(traj_queue, interval, verifier)
+    return MaxDurFirst(traj_it, interval, verifier)
