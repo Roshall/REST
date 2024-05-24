@@ -4,10 +4,8 @@ from operator import attrgetter
 from typing import Iterable
 
 import numpy as np
-
 from utilities.box2D import Box2D
-from utilities.trajectory import TrajectoryIntervalSeg, TrajectorySequenceSeg
-
+from utilities.trajectory import TrajectoryIntervalSeg
 
 def candidate_verified_queue(candidates: Iterable, region: Box2D, duration: int) -> Iterable[TrajectoryIntervalSeg]:
     """
@@ -19,18 +17,18 @@ def candidate_verified_queue(candidates: Iterable, region: Box2D, duration: int)
     """
     verified = []
     for cand_seg in candidates:
-        segs = verify_seg(cand_seg, region, duration)
-        if segs:
-            pos = bisect_right(verified, cand_seg.begin, key=attrgetter('begin'))
-            if pos > 0:
-                yield from islice(verified, pos)
-                verified = verified[pos:]
-            verified.extend(segs)
-            verified.sort(key=attrgetter('begin'))
+        mask = region.enclose(cand_seg.points)
+
+        pos = bisect_right(verified, cand_seg.begin, key=attrgetter('begin'))
+        if pos > 0:
+            yield from islice(verified, pos)
+            verified = verified[pos:]
+        verified.extend(verify_seg(cand_seg, mask, duration))
+        verified.sort(key=attrgetter('begin'))
     yield from verified
 
 
-def verify_seg(segment: TrajectorySequenceSeg, region: Box2D, duration: int) -> list[TrajectoryIntervalSeg]:
+def verify_seg(segment, mask, duration: int):
     """
     verify a trajectory segment, and find parts within region
     :param segment: trajectory sequence segment.
@@ -38,21 +36,26 @@ def verify_seg(segment: TrajectorySequenceSeg, region: Box2D, duration: int) -> 
     :param duration: the least lifetime of a segment
     :return: sorted parts of the segment by `begin`simplify verified queue
     """
-    mask = region.enclose(segment.points)
     in_pos = np.flatnonzero(mask)
     if len(in_pos) != 0:
         sid, begin, label = segment.id, segment.begin, segment.label
         if mask.all():
             yield TrajectoryIntervalSeg(sid, begin, label, len(mask))
             return
-
-        start_pos = np.flatnonzero(np.diff(in_pos, prepend=-2) > 1)
-        seg_lens = np.diff(start_pos, append=len(in_pos))
+        tmp = np.empty(in_pos.shape[0]+1, dtype=np.int32)
+        tmp[0] = -2
+        tmp[1:] = in_pos
+        start_pos = np.flatnonzero(np.diff(tmp) > 1)
+        tmp = tmp[:start_pos.shape[0]+1]
+        tmp[:-1] = start_pos
+        tmp[-1] = len(in_pos)
+        seg_lens = np.diff(tmp)
         res_mask = np.flatnonzero(seg_lens >= duration)
         if mask[0] and seg_lens[0] < duration:
             yield TrajectoryIntervalSeg(sid, begin, label, seg_lens[0])
 
-        yield from (TrajectoryIntervalSeg(sid, begin + in_pos[start_pos[m]], label, seg_lens[m]) for m in res_mask)
+        for m in res_mask:
+            yield TrajectoryIntervalSeg(sid, begin + in_pos[start_pos[m]], label, seg_lens[m])
 
         if mask[-1] and seg_lens[-1] < duration:
             yield TrajectoryIntervalSeg(sid, begin + in_pos[start_pos[-1]], label, seg_lens[-1])
