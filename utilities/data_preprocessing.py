@@ -5,7 +5,7 @@ def view_field(xy):
     return np.vstack((xy.min(), xy.max())).T.flatten()
 
 
-def traj_data(tracks, cols_name: list, label_map, stride, scale=100, cls = None):
+def traj_data(tracks, cols_name: list, label_map, stride, scale=100, cls=None):
     """
     load objects data to trajectory entry.
     :param tracks: pandas data frame of tracks
@@ -16,9 +16,9 @@ def traj_data(tracks, cols_name: list, label_map, stride, scale=100, cls = None)
     :param cls: which classes we want to use
     :return: generate of TrajTrace.
     """
-    tracks = tracks[cols_name]
     if cls is not None:
         tracks = tracks[tracks['cls'].isin(cls)]
+    tracks = tracks[cols_name]
     traces_by_id = tracks.groupby(cols_name[0])
     for tid, t in traces_by_id:
         cls_id = label_map[tid]
@@ -98,9 +98,9 @@ def traj_interp(np_arr, center=True):
         interp[:, 1] = mod  # revise class id
 
         interp_ls[i] = interp
-        if i % 1000 == 0:
+        if i % 5000 == 0:
             print(f'\r{i}/{id_num}', end='')
-    print('merging...')
+    print('\nmerging...')
     merged = np.concatenate(interp_ls)
     return pd.DataFrame(merged, columns=header).astype(dict(zip(header, (np.int32, np.uint8, np.int32, np.uint16, np.uint16))))
 
