@@ -6,8 +6,6 @@ from operator import attrgetter
 from time import perf_counter as now
 
 from search.base import absorb
-from search.co_moving import CoMovementPattern
-from search.rest import state_sliding
 from search.verifier import candidate_verified_queue, obj_verify
 from utilities.box2D import Box2D
 from utilities.trajectory import TrajectoryIntervalSeg, Trajectory
@@ -22,21 +20,98 @@ def heap_group_pop(heap):
         yield heapq.heappop(heap)[1]
 
 
+def label_verifier(label_counter):
+    for count in label_counter.values():
+        if count < 0:
+            return False
+    return True
+
+
+class PatternPool:
+    def __init__(self):
+        self.patterns = []
+        self.end = 0
+
+    def reset(self):
+        self.patterns = []
+
+    def pull(self, obj_m, label_count, start, end):
+        if not self.patterns:
+            self.patterns = [(obj_m, start)]
+            self.end = end
+            return
+
+        new = []
+        count = 0
+        adopt = False
+        cur = obj_m
+        for p, ps in self.patterns:
+            ckeys, pkeys = cur.keys(), p.keys()
+            clen, plen = len(ckeys), len(pkeys)
+
+            if clen > plen:
+                if ckeys > pkeys:
+                    new.append((cur, start))
+                    adopt = True
+                    break
+            elif clen < plen:
+                if ckeys < pkeys:
+                    start = ps
+                    count += 1
+                    continue
+            elif clen == plen:
+                if ckeys == pkeys:
+                    adopt = True
+                    break
+
+            new.append((cur, start))
+            # update new pattern
+            p_new = cur.copy()
+            for o, l in cur.items():
+                if o not in p:
+                    label_count[l] -= 1
+                    del p_new[o]
+
+            if label_verifier(label_count):
+                start = ps
+                cur = p_new
+                count += 1
+            else:
+                break
+        else:
+            new.append((cur, start))
+
+        p_iter = iter(self.patterns)
+        for obj_m, s in islice(p_iter, count if adopt else None):
+            yield obj_m.keys(), s, self.end
+        new.extend(p_iter)
+        self.patterns = new
+        self.end = end
+
+    def pop_all(self):
+        for pat, start in self.patterns:
+            yield pat.keys(), start, self.end
+        self.patterns = []
+
+
 class MaxObjNum:
     def __init__(self, trajectories: Iterable[TrajectoryIntervalSeg], interval, dur, labels):
         self.ts_grouped_traj = groupby(trajectories, key=attrgetter('begin'))
         self.interval = interval
         self.dur = dur - 1
         self.end_q = []
-        self.label_counter = {label: -count for label, count in labels.items()}
+        self.counter_back = {label: -count for label, count in labels.items()}
+        self.label_counter = self.counter_back.copy()
         self.label_m = {}
         self.eq_push = partial(heapq.heappush, self.end_q)
         self.eq_group_pop = partial(heap_group_pop, self.end_q)
+        self.label_verify = partial(label_verifier, label_counter=self.label_counter)
 
     def __iter__(self):
         start, terminal = self.interval
         final_s = terminal - self.dur
         last_s = self._init_state()
+        ppool = PatternPool()
 
         if last_s is None:
             return
@@ -44,22 +119,28 @@ class MaxObjNum:
         for ts, trajs in self.ts_grouped_traj:
             if self.end_q[0][0] >= terminal:
                 if self.label_verify():
-                    yield CoMovementPattern(self.label_m.copy(), [last_s, terminal])
+                    yield self.label_m.keys(), last_s, terminal
+                # impossible to concatenate
+                yield from ppool.pop_all()
             elif ts <= final_s:
                 while self.end_q:  # in case that all objects have gone
                     # we want to concatenate the windows, so the last window end (end_q[0][0])
                     # must >= ts + dur_l.
                     if (end := self.end_q[0][0]) < ts + self.dur:
                         if self.label_verify():
-                            yield CoMovementPattern(self.label_m.copy(), [last_s, end])
-                            self._remove(self.eq_group_pop())
+                            yield from ppool.pull(self.label_m.copy(), self.label_counter.copy(), last_s, end)
+                            self._remove()
                         else:
-                            self._remove(self.eq_group_pop())
-                            break  # impossible concatenate, so no need to find end >= ts
+                            # impossible concatenate
+                            self._remove()
+                            yield from ppool.pop_all()
+                            break  # no need to find end >= ts
                     else:  # find the end >= ts + dur_l, construct the final window, and get out of the loop
                         if self.label_verify():
-                            yield CoMovementPattern(self.label_m.copy(), [last_s, self.end_q[0][0]])
-                        # else impossible concatenate
+                            yield from ppool.pull(self.label_m.copy(), self.label_counter.copy(), last_s, end)
+                        else:
+                            # impossible concatenate
+                            yield from ppool.pop_all()
                         break
                 last_s = ts
                 self._add(trajs)
@@ -71,18 +152,23 @@ class MaxObjNum:
         while self.end_q:
             if self.label_verify():
                 if self.end_q[0][0] < terminal:
-                    yield CoMovementPattern(self.label_m.copy(), [last_s, self.end_q[0][0]])
-                    self._remove(self.eq_group_pop())
+                    yield self.label_m.keys(), last_s, self.end_q[0][0]
+                    self._remove()
                 else:
-                    yield CoMovementPattern(self.label_m.copy(), [last_s, terminal])
+                    yield self.label_m.keys(), last_s, terminal
                     return
             else:
                 return
 
-    def _remove(self, group):
-        for tid in group:
+    def _remove(self):
+        for tid in self.eq_group_pop():
             self.label_counter[self.label_m[tid]] -= 1
             del self.label_m[tid]
+
+    def reset(self):
+        self.label_m = {}
+        self.end_q = []
+        self.label_counter = self.counter_back.copy()
 
     def _init_state(self):
         start = self.interval[0]
@@ -111,12 +197,6 @@ class MaxObjNum:
             self.label_m[tid] = label
             self.eq_push((tra.len + tra.begin, tid))
 
-    def label_verify(self):
-        for count in self.label_counter.values():
-            if count < 0:
-                return False
-        return True
-
 
 def max_obj_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
     spat_tempo_idx, trajs = data_pack
@@ -125,7 +205,6 @@ def max_obj_search(data_pack, region: Box2D, labels: Mapping, duration_range, in
             return iter([])
 
     dur = duration_range[0]
-    label_verifier = partial(obj_verify, labels)
     # Note that spat_tempo should use fuzzy search but not fuzzy inner all
     traj_it = chain.from_iterable(spat_tempo_idx[c].query(trajs, region.bbox, dur, interval, 0) for c in labels)
     verified = candidate_verified_queue(traj_it, region, dur)
@@ -147,15 +226,6 @@ def max_obj_search(data_pack, region: Box2D, labels: Mapping, duration_range, in
     trajs.sort(key=attrgetter('begin'))
     # print(f'sort time: {now() - s_t}')
     if trajs:
-        partial_res = MaxObjNum(trajs, interval, dur, labels)
-        return state_sliding(partial_res, label_verifier, base_maintainer)
+        return MaxObjNum(trajs, interval, dur, labels)
     else:
         return iter([])
-
-
-def base_maintainer(prev_end, prev, new_len, count, to_absorb):
-    if to_absorb:
-        prev_iter = iter(prev)
-        return islice(prev_iter, count), prev_iter
-    else:
-        return prev, []
