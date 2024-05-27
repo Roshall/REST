@@ -5,8 +5,7 @@ from collections.abc import Mapping
 from functools import partial
 from itertools import chain, groupby, islice, batched
 from operator import attrgetter
-
-import numpy as np
+from time import perf_counter as now
 
 from search.co_moving import CoMovementPattern
 from search.rest import group_until, state_sliding
@@ -31,15 +30,15 @@ def absorb(trajectories: Mapping[int, Trajectory], duration):
                 if a != b:
                     s_len = a - beg
                     if s_len >= duration:
-                        yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len)
+                        yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len-1)
                     beg = b
             s_len = seq[-1] - beg
             if s_len >= duration:
-                yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len)
+                yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len-1)
         else:
             s_len = seq[-1] - seq[0]
             if s_len >= duration:
-                yield TrajectoryIntervalSeg(tid, seq[0], traj.label, s_len)
+                yield TrajectoryIntervalSeg(tid, seq[0], traj.label, s_len - 1)
 
 
 class BaseSliding:
@@ -123,7 +122,7 @@ class BaseSliding:
                 for tra in trajs:
                     if start + tra.len > self.dur:
                         self.label_m[tra.id] = tra.label
-                        self.eq_push((tra.len + tra.begin - 1, tra.id))
+                        self.eq_push((tra.len + tra.begin, tra.id))
         else:
             return
 
@@ -139,18 +138,22 @@ class BaseSliding:
     def _add(self, trajs):
         for tra in trajs:
             self.label_m[tra.id] = tra.label
-            self.eq_push((tra.len + tra.begin - 1, tra.id))
+            self.eq_push((tra.len + tra.begin, tra.id))
 
 
-def base_search(spat_tempo_idx, region: Box2D, labels: Mapping, duration_range, interval):
+def base_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
+    spat_tempo_idx, trajs = data_pack
+    for c in labels:
+        if c not in spat_tempo_idx:
+            return iter([])
+
     dur = duration_range[0]
     label_verifier = partial(obj_verify, labels)
     # Note that spat_tempo should use fuzzy search but not fuzzy inner all
-    candidates, probation = zip(*(spat_tempo_idx[label].where_intersect(((region.bbox, duration_range), interval))
-                                  for label in labels))
-    verified = candidate_verified_queue(chain.from_iterable(candidates), region, dur)
+    traj_it = chain.from_iterable(spat_tempo_idx[c].query(trajs, region.bbox, dur, interval, 0) for c in labels)
+    verified = candidate_verified_queue(traj_it, region, dur)
     visited = {}
-    for seg in chain(verified, chain.from_iterable(probation)):
+    for seg in verified:
         if (old := visited.get(seg.id, None)) is None:
             visited[seg.id] = Trajectory(seg.id, seg.label, [seg.begin, seg.begin + seg.len])
         else:
