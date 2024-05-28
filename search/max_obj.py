@@ -6,7 +6,7 @@ from operator import attrgetter
 from time import perf_counter as now
 
 from search.base import absorb
-from search.verifier import candidate_verified_queue, obj_verify
+from search.verifier import candidate_verified_queue
 from utilities.box2D import Box2D
 from utilities.trajectory import TrajectoryIntervalSeg, Trajectory
 
@@ -35,7 +35,7 @@ class PatternPool:
     def reset(self):
         self.patterns = []
 
-    def pull(self, obj_m, label_count, start, end):
+    def concatenate(self, obj_m, label_count, start, end):
         if not self.patterns:
             self.patterns = [(obj_m, start)]
             self.end = end
@@ -128,16 +128,16 @@ class MaxObjNum:
                     # must >= ts + dur_l.
                     if (end := self.end_q[0][0]) < ts + self.dur:
                         if self.label_verify():
-                            yield from ppool.pull(self.label_m.copy(), self.label_counter.copy(), last_s, end)
+                            yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, end)
                             self._remove()
                         else:
-                            # impossible concatenate
                             self._remove()
+                            # impossible concatenate
                             yield from ppool.pop_all()
                             break  # no need to find end >= ts
-                    else:  # find the end >= ts + dur_l, construct the final window, and get out of the loop
+                    else:  # found the end >= ts + dur_l, construct the final window, and get out of the loop
                         if self.label_verify():
-                            yield from ppool.pull(self.label_m.copy(), self.label_counter.copy(), last_s, end)
+                            yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, end)
                         else:
                             # impossible concatenate
                             yield from ppool.pop_all()
