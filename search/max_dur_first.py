@@ -84,7 +84,7 @@ class MaxDurFirst:
             yield from self.verify(finish, [self.playground[info[1]] for info in self.etq])
 
 
-def one_pass_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
+def max_dur_first_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
     spat_tempo_idx, trajs = data_pack
     for c in labels:
         if c not in spat_tempo_idx:
