@@ -152,13 +152,19 @@ class MaxObjNum:
         while self.end_q:
             if self.label_verify():
                 if self.end_q[0][0] < terminal:
-                    yield self.label_m.keys(), last_s, self.end_q[0][0]
+                    yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, self.end_q[0][0])
                     self._remove()
                 else:
-                    yield self.label_m.keys(), last_s, terminal
-                    return
+                    yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, self.end_q[0][0])
+                    break
             else:
-                return
+                break
+
+        end = ppool.end
+        max_start = end - self.dur
+        for pat, start in ppool.patterns:
+            if start <= max_start:
+                yield pat.keys(), start, end
 
     def _remove(self):
         for tid in self.eq_group_pop():
