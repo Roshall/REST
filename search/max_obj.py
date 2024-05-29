@@ -5,7 +5,7 @@ from itertools import chain, groupby, islice
 from operator import attrgetter
 from time import perf_counter as now
 
-from search.base import absorb
+from search.base import absorb, naive_merge_segments
 from search.verifier import candidate_verified_queue
 from utilities.box2D import Box2D
 from utilities.trajectory import TrajectoryIntervalSeg, Trajectory
@@ -123,10 +123,11 @@ class MaxObjNum:
                 # impossible to concatenate
                 yield from ppool.pop_all()
             elif ts <= final_s:
+                end_min = ts + self.dur
                 while self.end_q:  # in case that all objects have gone
                     # we want to concatenate the windows, so the last window end (end_q[0][0])
                     # must >= ts + dur_l.
-                    if (end := self.end_q[0][0]) < ts + self.dur:
+                    if (end := self.end_q[0][0]) < end_min:
                         if self.label_verify():
                             yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, end)
                             self._remove()
@@ -134,6 +135,10 @@ class MaxObjNum:
                             self._remove()
                             # impossible concatenate
                             yield from ppool.pop_all()
+                            while self.end_q and self.end_q[0][0] < end_min:
+                                # some objects having multiple trajectories,
+                                # this will ensure we first remove the old trajectory
+                                self._remove()
                             break  # no need to find end >= ts
                     else:  # found the end >= ts + dur_l, construct the final window, and get out of the loop
                         if self.label_verify():
@@ -205,32 +210,8 @@ class MaxObjNum:
 
 
 def max_obj_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
-    spat_tempo_idx, trajs = data_pack
-    for c in labels:
-        if c not in spat_tempo_idx:
-            return iter([])
-
     dur = duration_range[0]
-    # Note that spat_tempo should use fuzzy search but not fuzzy inner all
-    traj_it = chain.from_iterable(spat_tempo_idx[c].query(trajs, region.bbox, dur, interval, 0) for c in labels)
-    verified = candidate_verified_queue(traj_it, region, dur)
-    visited = {}
-    s_t = now()
-    for seg in verified:
-        if (old := visited.get(seg.id, None)) is None:
-            visited[seg.id] = Trajectory(seg.id, seg.label, [seg.begin, seg.begin + seg.len])
-        else:
-            old.seg.extend([seg.begin, seg.begin + seg.len])
-
-    # e_t = now()
-    # print(f'collection time: {e_t - s_t:.6f} s')
-    # s_t = e_t
-    trajs = list(absorb(visited, dur))
-    # e_t = now()
-    # print(f'absorb time: {e_t - s_t:.6f} s')
-    # s_t = e_t
-    trajs.sort(key=attrgetter('begin'))
-    # print(f'sort time: {now() - s_t}')
+    trajs = naive_merge_segments(data_pack, region, labels, dur, interval)
     if trajs:
         return MaxObjNum(trajs, interval, dur, labels)
     else:

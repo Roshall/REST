@@ -41,6 +41,25 @@ def absorb(trajectories: Mapping[int, Trajectory], duration):
                 yield TrajectoryIntervalSeg(tid, seq[0], traj.label, s_len - 1)
 
 
+def naive_merge_segments(data_pack, region, labels: Mapping, dur, interval):
+    spat_tempo_idx, trajs = data_pack
+    for c in labels:
+        if c not in spat_tempo_idx:
+            return []
+    candidates, probation = zip(*(spat_tempo_idx[label].query(trajs, region.bbox, dur, interval, 0)
+                                  for label in labels))
+    verified = chain(*probation, *(candidate_verified_queue(can, region, dur) for can in candidates))
+    visited = {}
+    for seg in verified:
+        if (old := visited.get(seg.id, None)) is None:
+            visited[seg.id] = Trajectory(seg.id, seg.label, [seg.begin, seg.begin + seg.len])
+        else:
+            old.seg.extend([seg.begin, seg.begin + seg.len])
+
+    trajs = list(absorb(visited, dur))
+    trajs.sort(key=attrgetter('begin'))
+    return trajs
+
 class BaseSliding:
     def __init__(self, trajectories: list[TrajectoryIntervalSeg], interval, dur, label_verifier):
         self.ts_grouped_traj = trajectories
@@ -142,27 +161,10 @@ class BaseSliding:
 
 
 def base_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
-    spat_tempo_idx, trajs = data_pack
-    for c in labels:
-        if c not in spat_tempo_idx:
-            return iter([])
-
-    dur = duration_range[0]
     label_verifier = partial(obj_verify, labels)
-    # Note that spat_tempo should use fuzzy search but not fuzzy inner all
-    traj_it = chain.from_iterable(spat_tempo_idx[c].query(trajs, region.bbox, dur, interval, 0) for c in labels)
-    verified = candidate_verified_queue(traj_it, region, dur)
-    visited = {}
-    for seg in verified:
-        if (old := visited.get(seg.id, None)) is None:
-            visited[seg.id] = Trajectory(seg.id, seg.label, [seg.begin, seg.begin + seg.len])
-        else:
-            old.seg.extend([seg.begin, seg.begin + seg.len])
-
-    trajs = list(absorb(visited, dur))
-    trajs.sort(key=attrgetter('begin'))
+    trajs = naive_merge_segments(data_pack, region, labels, duration_range[0], interval)
     if trajs:
-        partial_res = BaseSliding(trajs, interval, dur, label_verifier)
+        partial_res = BaseSliding(trajs, interval, duration_range[0], label_verifier)
         return state_sliding(partial_res, label_verifier, base_maintainer)
     else:
         return iter([])

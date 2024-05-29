@@ -1,6 +1,5 @@
 import heapq
 from collections.abc import Mapping, Iterable
-from copy import copy
 from functools import partial
 from itertools import chain, groupby
 from operator import attrgetter
@@ -89,7 +88,10 @@ def max_dur_first_search(data_pack, region: Box2D, labels: Mapping, duration_ran
     for c in labels:
         if c not in spat_tempo_idx:
             return iter([])
-    traj_it = heapq.merge(*(spat_tempo_idx[c].query(trajs, region.bbox, duration_range[0], interval, 1) for c in labels), key=attrgetter('begin'))
-    traj_it = candidate_verified_queue(traj_it, region, duration_range[0])
+    candidates, probation = zip(*(spat_tempo_idx[label].query(trajs, region.bbox, duration_range[0], interval, 1)
+                                  for label in labels))
+    traj_it = heapq.merge(*probation,
+                          *(candidate_verified_queue(can, region, duration_range[0]) for can in candidates),
+                          key=attrgetter('begin'))
     verifier = partial(yield_co_move, duration_range[0], labels)
     return MaxDurFirst(traj_it, interval, verifier)
