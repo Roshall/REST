@@ -132,6 +132,9 @@ class MaxObjNum:
             else:
                 break
 
+        yield from self._wrapup(ppool, last_s, terminal)
+
+    def _wrapup(self, ppool, last_s, terminal):
         # Note: the following output may fail the duration constraints.
         # However, we must keep them in case they can be concatenated to the last window.
         while self.end_q:
@@ -140,11 +143,13 @@ class MaxObjNum:
                     yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, self.end_q[0][0])
                     self._remove()
                 else:
-                    yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, self.end_q[0][0])
+                    yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, terminal)
                     break
             else:
                 break
 
+        # ppool contains the pattern to be concatenated
+        # finally, we check their duration and pop them out.
         end = ppool.end
         max_start = end - self.dur
         for pat, start in ppool.patterns:
