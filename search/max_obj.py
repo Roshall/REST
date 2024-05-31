@@ -15,11 +15,14 @@ class PatternPool:
         self.patterns = []
         self.end = 0
 
-    def reset(self):
-        self.patterns = []
-
     def concatenate(self, obj_m, label_count, start, end):
         if not self.patterns:
+            self.patterns = [(obj_m, start)]
+            self.end = end
+            return
+        elif start > (end_l := self.end):
+            for objs, s in self.patterns:
+                yield objs.keys(), s, end_l
             self.patterns = [(obj_m, start)]
             self.end = end
             return
