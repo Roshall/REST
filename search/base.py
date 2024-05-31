@@ -3,62 +3,15 @@ import math
 from collections import Counter
 from collections.abc import Mapping
 from functools import partial
-from itertools import chain, groupby, islice, batched
+from itertools import chain, groupby, islice
 from operator import attrgetter
-from time import perf_counter as now
 
 from search.co_moving import CoMovementPattern
-from search.rest import group_until, state_sliding
-from search.verifier import candidate_verified_queue, obj_verify
+from search.rest import group_until, state_sliding, naive_merge_segments
+from search.verifier import obj_verify
 from utilities.box2D import Box2D
-from utilities.trajectory import TrajectoryIntervalSeg, Trajectory
+from utilities.trajectory import TrajectoryIntervalSeg
 
-
-def absorb(trajectories: Mapping[int, Trajectory], duration):
-    """
-    merge segments from the same object into a single segment
-    :param trajectories: a map: id -> trajectory
-    :param duration: co-movement duration
-    :return: a generator with trajectories herein.
-    """
-    for tid, traj in trajectories.items():
-        seq = traj.seg
-        if len(seq) > 2:
-            seq.sort()
-            beg = seq[0]
-            for a, b in batched(islice(seq, 1, len(seq)-1), n=2):
-                if a != b:
-                    s_len = a - beg
-                    if s_len >= duration:
-                        yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len-1)
-                    beg = b
-            s_len = seq[-1] - beg
-            if s_len >= duration:
-                yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len-1)
-        else:
-            s_len = seq[-1] - seq[0]
-            if s_len >= duration:
-                yield TrajectoryIntervalSeg(tid, seq[0], traj.label, s_len - 1)
-
-
-def naive_merge_segments(data_pack, region, labels: Mapping, dur, interval):
-    spat_tempo_idx, trajs = data_pack
-    for c in labels:
-        if c not in spat_tempo_idx:
-            return []
-    candidates, probation = zip(*(spat_tempo_idx[label].query(trajs, region.bbox, dur, interval, 0)
-                                  for label in labels))
-    verified = chain(*probation, *(candidate_verified_queue(can, region, dur) for can in candidates))
-    visited = {}
-    for seg in verified:
-        if (old := visited.get(seg.id, None)) is None:
-            visited[seg.id] = Trajectory(seg.id, seg.label, [seg.begin, seg.begin + seg.len])
-        else:
-            old.seg.extend([seg.begin, seg.begin + seg.len])
-
-    trajs = list(absorb(visited, dur))
-    trajs.sort(key=attrgetter('begin'))
-    return trajs
 
 class BaseSliding:
     def __init__(self, trajectories: list[TrajectoryIntervalSeg], interval, dur, label_verifier):
