@@ -18,6 +18,18 @@ def test_absorb():
 
 
 class TestBaseSliding(object):
+    #     1                  21
+    # 0:  |------------------|  label: 0
+    #     1    5
+    # 1:  |----|                label: 1
+    #      2      10
+    # 2:   |------|             label: 0
+    #          5      16
+    # 3:       |------|         label: 1
+    #                15      21
+    # 4:             |-------|  label: 0
+    #                15       22
+    # 5:             |--------| label: 1
     traj_len = [[1, 21], [1, 5], [2, 10], [5, 16], [15, 21], [15, 22]]
     trajs = [TrajectoryIntervalSeg(i, itv[0], i & 1, itv[1] - itv[0]) for i, itv in enumerate(traj_len)]
 
@@ -26,8 +38,15 @@ class TestBaseSliding(object):
     labels = {0: 1, 1: 1}
     label_verifier = partial(obj_verify, labels)
 
-    def setup(self):
-        self.sliding = BaseSliding(self.trajs, self.interval, self.duration, self.label_verifier)
+    def setup(self, *, method='max_obj'):
+        match method:
+            case 'max_obj':
+                gen = MaxObjNum
+            case 'base':
+                gen = BaseSliding
+            case _:
+                raise ValueError(f"Unexpected mtd value: {method}")
+        self.sliding = gen(self.trajs, self.interval, self.duration, self.labels)
 
     def test_base_sliding(self):
         self.setup()
