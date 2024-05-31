@@ -177,7 +177,7 @@ class MaxObjNum:
                     self._add(trajs)
                     return ts
             else:
-                self._add(tra for tra in trajs if tra.end > min_end)
+                self._add(tra for tra in trajs if tra.end >= min_end)
         else:
             if self.end_q:
                 return start

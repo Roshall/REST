@@ -92,7 +92,7 @@ class BaseSliding:
                 break
             else:
                 for tra in trajs:
-                    if tra.end > self.dur:
+                    if tra.end >= start + self.dur - 1:
                         self.label_m[tra.id] = tra.label
                         self.eq_push((tra.end, tra.id))
         else:
