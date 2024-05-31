@@ -97,18 +97,12 @@ class MaxObjNum:
         start, terminal = self.interval
         final_s = terminal - self.dur
         last_s = self._init_state()
-        ppool = PatternPool()
-
         if last_s is None:
             return
 
+        ppool = PatternPool()
         for ts, trajs in self.ts_grouped_traj:
-            if self.end_q[0][0] >= terminal:
-                if self.label_verify():
-                    yield self.label_m.keys(), last_s, terminal
-                # impossible to concatenate
-                yield from ppool.pop_all()
-            elif ts <= final_s:
+            if ts <= final_s:
                 end_min = ts + self.dur
                 while self.end_q:  # in case that all objects have gone
                     # we want to concatenate the windows, so the last window end (end_q[0][0])
