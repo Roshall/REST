@@ -3,28 +3,11 @@ from functools import partial
 import heapq
 from itertools import chain, groupby, islice
 from operator import attrgetter
-from time import perf_counter as now
 
-from search.base import absorb, naive_merge_segments
-from search.verifier import candidate_verified_queue
+from search.rest import heap_group_pop, naive_merge_segments
+from search.verifier import label_verifier
 from utilities.box2D import Box2D
-from utilities.trajectory import TrajectoryIntervalSeg, Trajectory
-
-
-def heap_group_pop(heap):
-    if heap:
-        n = heap[0][0]
-    else:
-        return
-    while heap and heap[0][0] == n:
-        yield heapq.heappop(heap)[1]
-
-
-def label_verifier(label_counter):
-    for count in label_counter.values():
-        if count < 0:
-            return False
-    return True
+from utilities.trajectory import TrajectoryIntervalSeg
 
 
 class PatternPool:

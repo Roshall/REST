@@ -5,7 +5,7 @@ import numpy as np
 from configs import cfg
 from search.rest import yield_co_move
 from search.verifier import candidate_verified_queue, verify_seg
-from search.one_pass import one_pass_search, SequentialSearcher
+from search.max_dur_first import max_dur_first_search, MaxDurFirst
 from test.index_test_helper import grid_spt_tempo_idx_fake_data, query4test
 from utilities.box2D import Box2D
 from utilities.trajectory import TrajectorySequenceSeg, TrajectoryIntervalSeg, BasicTrajectorySeg
@@ -31,10 +31,10 @@ class TestTempSpatialIndex:
     def test_one_pass_search(self):
         test1, test2 = query4test()
 
-        res = list(one_pass_search(self.tempo_spatial, *test1))
+        res = list(max_dur_first_search(self.tempo_spatial, *test1))
         assert res == [([1, 3, 2], 5, 10), ([1, 3], 4, 10), ([1], 1, 10)]
 
-        res = list(one_pass_search(self.tempo_spatial, *test2))
+        res = list(max_dur_first_search(self.tempo_spatial, *test2))
         assert res == [([1, 3, 5], 9, 18), ([3, 5, 4, 2], 11, 20), ([3, 4, 2], 11, 22)]
 
 
@@ -114,6 +114,6 @@ def test_sequential_search():
                              (TrajectoryIntervalSeg(tid, *info) for tid, info in enumerate(traj3, 6)))
 
     ans = [(6, 16, 1), (8, 19, 3), (9, 20, 1), (11, 21, 1), (11, 22, 5)]
-    searcher = SequentialSearcher(traj_total, (3, 21), lambda am, end, cond: [(len(am), end, len(cond))])
+    searcher = MaxDurFirst(traj_total, (3, 21), lambda am, end, cond: [(len(am), end, len(cond))])
     query = list(searcher)
     assert ans == query

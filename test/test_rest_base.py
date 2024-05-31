@@ -1,7 +1,7 @@
 from configs import cfg
-from indices import build_tempo_spatial_index
-from search.base import absorb, BaseSliding, base_search, base_maintainer
-from search.rest import state_sliding
+from search.base import BaseSliding, base_search, base_maintainer
+from search.max_obj import MaxObjNum
+from search.rest import state_sliding, absorb
 from search.verifier import obj_verify
 from test.index_test_helper import grid_spt_tempo_idx_fake_data, query4test
 from utilities.trajectory import Trajectory, TrajectoryIntervalSeg

@@ -1,7 +1,6 @@
 from functools import partial
 
-from search.rest import df_filter
-from search.verifier import obj_verify
+from search.verifier import obj_verify, df_filter
 from search.baseline.naive import base_slider
 from search.baseline.state import state_slider
 from utilities.data_preprocessing import group_by_frame

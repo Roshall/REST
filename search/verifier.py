@@ -1,11 +1,12 @@
 from _bisect import bisect_right
-from itertools import islice
+from itertools import islice, pairwise
 from operator import attrgetter
 from typing import Iterable
 
 import numpy as np
 from utilities.box2D import Box2D
 from utilities.trajectory import TrajectoryIntervalSeg
+
 
 def candidate_verified_queue(candidates: Iterable, region: Box2D, duration: int) -> Iterable[TrajectoryIntervalSeg]:
     """
@@ -72,3 +73,16 @@ def obj_verify(target, label_map):
 
 def len_filter(num_m, length):
     return [obj for obj in num_m if num_m[obj] >= length]
+
+
+def df_filter(df, reg_verifier, target_label):
+    df = df[df['cls'].isin(target_label)]  # class verification
+    df = df[reg_verifier(df[['x', 'y']])]  # region verification
+    return df
+
+
+def label_verifier(label_counter):
+    for count in label_counter.values():
+        if count < 0:
+            return False
+    return True
