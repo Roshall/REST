@@ -92,9 +92,9 @@ class BaseSliding:
                 break
             else:
                 for tra in trajs:
-                    if start + tra.len > self.dur:
+                    if tra.end > self.dur:
                         self.label_m[tra.id] = tra.label
-                        self.eq_push((tra.len + tra.begin, tra.id))
+                        self.eq_push((tra.end, tra.id))
         else:
             return
 
@@ -110,7 +110,7 @@ class BaseSliding:
     def _add(self, trajs):
         for tra in trajs:
             self.label_m[tra.id] = tra.label
-            self.eq_push((tra.len + tra.begin, tra.id))
+            self.eq_push((tra.end, tra.id))
 
 
 def base_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
