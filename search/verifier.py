@@ -5,7 +5,7 @@ from typing import Iterable
 
 import numpy as np
 from utilities.box2D import Box2D
-from utilities.trajectory import TrajectoryIntervalSeg
+from traj_seg import TrajectoryIntervalSeg
 
 
 def candidate_verified_queue(candidates: Iterable, region: Box2D, duration: int) -> Iterable[TrajectoryIntervalSeg]:
