@@ -6,7 +6,7 @@ import numpy as np
 from utilities.data_preprocessing import view_field
 
 
-def life_broder_cls_top(df, quantiles: tuple = ([0, 5000, 50000, 10000], [0.5, 0.2, 0.1, 0.05]), k: int = 9):
+def life_border_cls_top(df, quantiles: tuple = ([0, 5000, 50000, 10000], [0.5, 0.2, 0.1, 0.05]), k: int = 9):
     df = df.drop(columns=['x', 'y', 'fid'])
     filtered = df.drop_duplicates().groupby('cls').count().sort_values(by='oid', ascending=False)[:k]
     group_cls = df.groupby('cls')
@@ -28,10 +28,10 @@ def region_border(df, cls: Iterable[int]):
 
 
 def border_meta(df, tempo_stride=60):
-    broder = {}
-    broder_by_cls = life_broder_cls_top(df)
-    reg_border_by_cls = region_border(df, broder_by_cls)
-    for c, life_border in broder_by_cls.items():
+    border = {}
+    border_by_cls = life_border_cls_top(df)
+    reg_border_by_cls = region_border(df, border_by_cls)
+    for c, life_border in border_by_cls.items():
         border[c] = {'life_border': life_border, 'reg_border': reg_border_by_cls[c],
                      'tempo_stride': tempo_stride}
     return border
@@ -59,9 +59,15 @@ if __name__ == '__main__':
     import json
     from configs import cfg
     path = cfg.DATA.PATH
-    dataset_name = 'timesquare3h'
-    filepath = os.path.join(path, f'{dataset_name}.pkl')
-    df, _, _ = dataset.load_yolo_for(filepath)
-    border = border_meta(df)
-    filepath = os.path.join(cfg.INDEX.CONFIG_PATH, dataset_name + '.json')
-    json.dump(border, open(filepath, 'w'), indent=4)
+    dataset_name = 'shinjuku3h'
+    jsonpath = os.path.join(cfg.INDEX.META_PATH, dataset_name + '.json')
+    if not os.path.exists(jsonpath):
+        filepath = os.path.join(path, f'{dataset_name}.pkl')
+        df, _, _ = dataset.load_yolo_for(filepath)
+        border = border_meta(df)
+
+        json.dump(border, open(jsonpath, 'w'), indent=4)
+    else:
+        print(f'File {jsonpath} exists')
+
+
