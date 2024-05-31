@@ -5,14 +5,13 @@ from itertools import chain, groupby
 from operator import attrgetter
 
 
-from search.rest import yield_co_move, group_until
+from search.rest import yield_co_move, heap_group_pop
 from search.verifier import candidate_verified_queue
 from utilities.box2D import Box2D
-from utilities.trajectory import TrajectoryIntervalSeg, TrajectorySequenceSeg
 
 
 class MaxDurFirst:
-    def __init__(self, trajs: Iterable[TrajectoryIntervalSeg | TrajectorySequenceSeg], interval, verifier):
+    def __init__(self, trajs: Iterable, interval, verifier):
         self.ts_grouped_traj = groupby(trajs, attrgetter('begin'))
         self.interval = interval
         self.playground = {}
@@ -20,9 +19,11 @@ class MaxDurFirst:
         end_time_queue = []
         self.etq_push = partial(heapq.heappush, end_time_queue)
         self.etq = end_time_queue
+        self.group_pop = partial(heap_group_pop, end_time_queue)
 
     def _yield_until(self, ts, pre_insert):
-        for t, group in group_until(self.etq, ts):
+        while self.etq and (t := self.etq[0][0]) <= ts:
+            group = self.group_pop()
             if t < ts:
                 yield from self.verify(t, [self.playground[tid] for tid in group])
             else:  # t == ts
