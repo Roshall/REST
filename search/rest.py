@@ -5,11 +5,11 @@ from collections.abc import Iterable, MutableMapping, Callable
 from collections.abc import Mapping, Sequence
 from itertools import takewhile, islice, batched, chain
 from operator import attrgetter
-from typing import Mapping
 
 from search.co_moving import CoMovementPattern
 from search.verifier import candidate_verified_queue
-from utilities.trajectory import BasicTrajectorySeg, Trajectory, TrajectoryIntervalSeg
+from utilities.trajectory import BasicTrajectorySeg, Trajectory
+from traj_seg import TrajectoryIntervalSeg
 
 
 def yield_co_move(duration: int, labels: Mapping[int, int], active_space: MutableMapping[int, BasicTrajectorySeg],
@@ -186,15 +186,15 @@ def absorb(trajectories: Mapping[int, Trajectory], duration):
                 if a != b:
                     s_len = a - beg
                     if s_len >= duration:
-                        yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len-1)
+                        yield TrajectoryIntervalSeg(tid, beg, traj.label, a-1)
                     beg = b
             s_len = seq[-1] - beg
             if s_len >= duration:
-                yield TrajectoryIntervalSeg(tid, beg, traj.label, s_len-1)
+                yield TrajectoryIntervalSeg(tid, beg, traj.label, seq[-1]-1)
         else:
             s_len = seq[-1] - seq[0]
             if s_len >= duration:
-                yield TrajectoryIntervalSeg(tid, seq[0], traj.label, s_len - 1)
+                yield TrajectoryIntervalSeg(tid, seq[0], traj.label, seq[-1] - 1)
 
 
 def naive_merge_segments(data_pack, region, labels: Mapping, dur, interval):
@@ -208,9 +208,9 @@ def naive_merge_segments(data_pack, region, labels: Mapping, dur, interval):
     visited = {}
     for seg in verified:
         if (old := visited.get(seg.id, None)) is None:
-            visited[seg.id] = Trajectory(seg.id, seg.label, [seg.begin, seg.begin + seg.len])
+            visited[seg.id] = Trajectory(seg.id, seg.label, [seg.begin, seg.end])
         else:
-            old.seg.extend([seg.begin, seg.begin + seg.len])
+            old.seg.extend([seg.begin, seg.end])
 
     trajs = list(absorb(visited, dur))
     trajs.sort(key=attrgetter('begin'))

@@ -41,7 +41,7 @@ def verify_seg(segment, mask, duration: int):
     if len(in_pos) != 0:
         sid, begin, label = segment.id, segment.begin, segment.label
         if mask.all():
-            yield TrajectoryIntervalSeg(sid, begin, label, len(mask))
+            yield TrajectoryIntervalSeg(sid, begin, label, begin + len(mask))
             return
         tmp = np.empty(in_pos.shape[0]+1, dtype=np.int32)
         tmp[0] = -2
@@ -52,24 +52,24 @@ def verify_seg(segment, mask, duration: int):
             s_len = len(in_pos)
             if mask[0] or mask[-1] or s_len >= duration:
                 s = in_pos[s] + begin
-                yield TrajectoryIntervalSeg(sid, s, label, s_len)
+                yield TrajectoryIntervalSeg(sid, s, label, s + s_len)
             return
 
         s_len = start_pos[1] - s
         if mask[0] or s_len >= duration:
             s = in_pos[s] + begin
-            yield TrajectoryIntervalSeg(sid, s, label, s_len)
+            yield TrajectoryIntervalSeg(sid, s, label, s + s_len)
 
         for s, e in pairwise(islice(start_pos, 1, sp_len)):
             if (s_len := e - s) >= duration:
                 s = in_pos[s] + begin
-                yield TrajectoryIntervalSeg(sid, s, label, s_len)
+                yield TrajectoryIntervalSeg(sid, s, label, s + s_len)
 
         s = start_pos[-1]
         s_len = len(in_pos) - s
         if mask[-1] or s_len >= duration:
             s = in_pos[s] + begin
-            yield TrajectoryIntervalSeg(sid, s, label, s_len)
+            yield TrajectoryIntervalSeg(sid, s, label, s + s_len)
 
 
 def obj_verify(target, label_map):

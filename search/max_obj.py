@@ -7,7 +7,6 @@ from operator import attrgetter
 from search.rest import heap_group_pop, naive_merge_segments
 from search.verifier import label_verifier
 from utilities.box2D import Box2D
-from utilities.trajectory import TrajectoryIntervalSeg
 
 
 class PatternPool:
@@ -81,7 +80,7 @@ class PatternPool:
 
 
 class MaxObjNum:
-    def __init__(self, trajectories: Iterable[TrajectoryIntervalSeg], interval, dur, labels):
+    def __init__(self, trajectories: Iterable, interval, dur, labels):
         self.ts_grouped_traj = groupby(trajectories, key=attrgetter('begin'))
         self.interval = interval
         self.dur = dur - 1
@@ -178,7 +177,7 @@ class MaxObjNum:
                     self._add(trajs)
                     return ts
             else:
-                self._add(tra for tra in trajs if tra.begin + tra.len > min_end)
+                self._add(tra for tra in trajs if tra.end > min_end)
         else:
             if self.end_q:
                 return start
@@ -191,7 +190,7 @@ class MaxObjNum:
             label = tra.label
             self.label_counter[label] += 1
             self.label_m[tid] = label
-            self.eq_push((tra.len + tra.begin, tid))
+            self.eq_push((tra.end, tid))
 
 
 def max_obj_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):

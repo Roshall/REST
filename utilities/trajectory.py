@@ -20,8 +20,8 @@ class RawTraj(NamedTuple):
 
 class TrajMeta(NamedTuple):
     """ This class should be removed"""
-    duration: Sequence
     loc: int
+    duration: Sequence
 
 
 @dataclass(slots=True)
@@ -46,7 +46,7 @@ class BasicTrajectorySeg:
 
 @dataclass(slots=True)
 class TrajectoryIntervalSeg(BasicTrajectorySeg):
-    len: int
+    end: int
 
 
 @dataclass(slots=True)

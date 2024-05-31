@@ -31,7 +31,7 @@ class MaxDurFirst:
                     if (revising := pre_insert.pop(tid, None)) is None:
                         t_candi.append(self.playground[tid])
                     else:
-                        self.etq_push((revising.len + revising.begin, tid))
+                        self.etq_push((revising.end, tid))
                 if t_candi:
                     yield from self.verify(ts, t_candi)
                 return
@@ -40,7 +40,7 @@ class MaxDurFirst:
         for tra_id, tra in pre_insert.items():
             assert tra_id not in self.playground
             self.playground[tra_id] = tra
-            self.etq_push((tra.len + tra.begin, tra_id))
+            self.etq_push((tra.end, tra_id))
         return self.etq[0][0]
 
     def _init_state(self):
@@ -48,7 +48,7 @@ class MaxDurFirst:
         for ts, trajs in self.ts_grouped_traj:  # gather trajs on the starting border
             if ts < start:
                 for traj in trajs:
-                    if traj.len + ts > start:
+                    if traj.end > start:
                         traj.begin = start
                         self.playground[traj.id] = traj
             elif ts == start:
@@ -58,7 +58,7 @@ class MaxDurFirst:
                 self.ts_grouped_traj = chain(((ts, trajs),), self.ts_grouped_traj)
                 break
         for tid, traj in self.playground.items():
-            self.etq_push((traj.begin + traj.len, tid))
+            self.etq_push((traj.end, tid))
 
     def __iter__(self):
         begin, finish = self.interval
