@@ -15,7 +15,7 @@ from utilities.key import generate_key
 def load_traj_seg(border_stride, fname, dataset_name, cfg):
     filename = f'{dataset_name}_{border_stride[0]}'.replace('(', '').replace(')', '').replace(' ', '').replace(',', '_')
     filename = generate_key(filename)
-    file_path = os.path.join(cfg.INDEX.CONFIG_PATH, f'{dataset_name}_traj.pkl')
+    file_path = os.path.join(cfg.INDEX.META_PATH, f'{dataset_name}_traj.pkl')
     if os.path.exists(file_path):
         with open(file_path, 'rb') as f:
             trajs = pickle.load(f)
@@ -23,7 +23,7 @@ def load_traj_seg(border_stride, fname, dataset_name, cfg):
         df, cols, cls_m = load_yolo_for(fname)
         trajs_raw = traj_data(df, cols, cls_m, cfg.DATA.STRIDE, scale=cfg.DATA.SCALE, cls=list(border_stride))
         trajs = save_traj(trajs_raw, file_path)
-    file_path = os.path.join(cfg.INDEX.CONFIG_PATH, f'{filename}.pkl')
+    file_path = os.path.join(cfg.INDEX.META_PATH, f'{filename}.pkl')
     if os.path.exists(file_path):
         with open(file_path, 'rb') as f:
             segs = pickle.load(f)
@@ -34,7 +34,6 @@ def load_traj_seg(border_stride, fname, dataset_name, cfg):
 
 def build_rest(trajs, segs, border_m):
     idx_dic = {}
-    stride = border_m[0]['tempo_stride']
 
     for i, (traj, seg) in enumerate(zip(trajs, segs)):
         beg = traj.begin

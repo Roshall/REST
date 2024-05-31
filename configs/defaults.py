@@ -4,10 +4,10 @@ from yacs.config import CfgNode as CN
 _C = CN()
 
 _C.INDEX = CN()
-_C.INDEX.SEARCH_METHOD = CN()
-_C.INDEX.SEARCH_METHOD.TEMPO = 'FuzzyInnerAll'
-_C.INDEX.SEARCH_METHOD.REGION = 'NotSureSearch'
-_C.INDEX.SEARCH_METHOD.USER = 'NotSureSearch'
+# _C.INDEX.SEARCH_METHOD = CN()
+# _C.INDEX.SEARCH_METHOD.TEMPO = 'FuzzyInnerAll'
+# _C.INDEX.SEARCH_METHOD.REGION = 'NotSureSearch'
+# _C.INDEX.SEARCH_METHOD.USER = 'NotSureSearch'
 
 _C.INDEX.REGION = CN()
 # should the region index simply return all region or
@@ -18,10 +18,10 @@ _C.INDEX.REGION.TYPE = 'grid'
 _C.INDEX.REGION.GRID = CN()
 _C.INDEX.REGION.GRID.SPACE = (16, 12)
 
-_C.INDEX.CONFIG_PATH = '/home/lg/VDBM/spatiotemporal/regional_tempo_spatial_query/meta'
+_C.INDEX.META_PATH = '/home/lg/VDBM/spatiotemporal/regional_tempo_spatial_query/meta'
 
 _C.DATA = CN()
-_C.DATA.PATH = '/home/lg/VDBM/spatiotemporal/regional_tempo_spatial_query/test'
+_C.DATA.PATH = '/media/lg/DataSet/Dataset/detection_results/'
 _C.DATA.SCALE = 1
 _C.DATA.STRIDE = 1
 
