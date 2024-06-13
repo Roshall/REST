@@ -52,17 +52,17 @@ def yield_co_move(duration: int, labels: Mapping[int, int], active_space: Mutabl
 
         i = len(begins)
         old = begins[-1]
-        for p in range(i - 1, bisect_left(begins, begin_min)-1, -1):
+        for p in range(i - 1, bisect_left(begins, begin_min) - 1, -1):
             beg = begins[p]
             if beg != old:
                 yield ids[:i], old, timestamp
-                for j in range(p+1, i):
+                for j in range(p + 1, i):
                     label = cls[j]
                     result_bag[label] -= 1
                     if result_bag[label] < 0:
                         return
                 old = beg
-                i = p+1
+                i = p + 1
         else:
             yield ids[:i], beg, timestamp
 
@@ -100,7 +100,7 @@ def sliding_window(df, win_len):
 
 def state_sliding(pat_series: Iterable[CoMovementPattern],
                   obj_verifier,
-                  state_maintainer: Callable[[int, Sequence, int, int, bool], [Iterable, Iterable]])\
+                  state_maintainer: Callable[[int, Sequence, int, int, bool], [Iterable, Iterable]]) \
         -> Iterable[CoMovementPattern]:
     # $prev stores seen patterns. Every pattern is a set of objs that co-moves a certain period
     # Note that in terms of object set, prev[0] ⊃ prev[1] ⊃ prev[2] ⊃ ...
@@ -182,15 +182,15 @@ def absorb(trajectories: Mapping[int, Trajectory], duration):
         if len(seq) > 2:
             seq.sort()
             beg = seq[0]
-            for a, b in batched(islice(seq, 1, len(seq)-1), n=2):
+            for a, b in batched(islice(seq, 1, len(seq) - 1), n=2):
                 if a != b:
                     s_len = a - beg
                     if s_len >= duration:
-                        yield TrajectoryIntervalSeg(tid, beg, traj.label, a-1)
+                        yield TrajectoryIntervalSeg(tid, beg, traj.label, a - 1)
                     beg = b
             s_len = seq[-1] - beg
             if s_len >= duration:
-                yield TrajectoryIntervalSeg(tid, beg, traj.label, seq[-1]-1)
+                yield TrajectoryIntervalSeg(tid, beg, traj.label, seq[-1] - 1)
         else:
             s_len = seq[-1] - seq[0]
             if s_len >= duration:
