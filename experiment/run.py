@@ -25,10 +25,11 @@ def build_index(fname):
 
 
 def init(query_type, trajs_info):
+    query_type = query_type.split('_')
     match query_type:
-        case ('index', mtd_str):
+        case ('index', *mtd_str):
             search_mtd = partial(index_based_framework, method=mtd_str)
-        case ('sliding', mtd_str):
+        case ('sliding', *mtd_str):
             search_mtd = partial(sliding_framework, method=mtd_str)
         case _:
             raise ValueError(f'wrong query type: {cfg.QUERY}')
@@ -37,7 +38,7 @@ def init(query_type, trajs_info):
 
 def query(mtd_str, trajs_info, content):
     search_mtd = init(mtd_str, trajs_info)
-    return search_mtd(*content)
+    return search_mtd(*content.values())
 
 
 def count_result(mtd_str, searcher):
@@ -61,22 +62,22 @@ def find_bug(query_c, run):
 
 
 if __name__ == '__main__':
-    dataset_name = 'florida5h'
-    interval_bound = 30 * 60 * 60 * 3
-    query_content = [
-        Box2D((250,1786,38,902), cfg),  # region
-        {0: 2},  # label
-        (10, 10000),  # duration
-        (0, interval_bound),  # interval
-    ]
+    dataset_name = 'ireland5h'
+    interval_bound = 30 * 60
+    query_content = {
+        'region': Box2D((522,3794,237,1965), cfg),
+        'pattern': {0: 1},  # label
+        'duraiton': (1, 100000),
+        'interval': (0, interval_bound),
+    }
     file_path = os.path.join(cfg.DATA.PATH, f'{dataset_name}.pkl')
     # run the index based
     data_index = build_index(file_path)
-    mtds_index = [('index', imtd) for imtd in ('max_obj', 'max_dur_multi', 'max_dur_one', 'base')]
-    # mtds_index = [('index', imtd) for imtd in ('max_dur_multi', 'max_dur_one')]
+    mtds_index = [f'index_{imtd}' for imtd in ('max_obj', 'max_dur_multi', 'max_dur_one', 'base')]
+    # mtds_index = [f'index_{imtd}' for imtd in ('max_dur_multi', 'max_dur_one')]
     # run the sliding based
     # data_raw, _, _ = load_yolo_for(file_path)
-    # mtds_sliding = [('sliding', smtd) for smtd in ('naive', 'state')]
+    # mtds_sliding = [f'sliding_{smtd}' for smtd in ('naive', 'state')]
     mtds_sliding, data_raw = [], None
     for mtd, data in chain(((mtd, data_index) for mtd in mtds_index), ((mtd, data_raw) for mtd in mtds_sliding)):
         searcher = query(mtd, data, query_content)

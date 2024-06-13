@@ -4,18 +4,17 @@ from search.index_based.max_obj import MaxObjNumEnumerator
 from search.rest import vanilla_merge, one_pass_merge
 
 
-def index_based_framework(data_pack, region, labels, duration, interval, *, method='max_dur_multi'):
+def index_based_framework(data_pack, region, labels, duration, interval, *, method=('max', 'dur', 'multi')):
     rest_idx, trajs = data_pack
     dur = duration[0]
     for c in labels:
         if c not in rest_idx:
             return []
 
-    mtd_ls = method.split('_')
-    if len(mtd_ls) == 3:
-        *enu_mtd, merge_mtd = mtd_ls
+    if len(method) == 3:
+        *enu_mtd, merge_mtd = method
     else:
-        enu_mtd, merge_mtd = mtd_ls, 'multi'
+        enu_mtd, merge_mtd = method, 'multi'
 
     match merge_mtd:  # merge method
         case 'multi':
