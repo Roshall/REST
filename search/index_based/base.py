@@ -7,9 +7,8 @@ from itertools import chain, groupby, islice
 from operator import attrgetter
 
 from search.co_moving import CoMovementPattern
-from search.rest import group_until, state_sliding, naive_merge_segments
+from search.rest import group_until, state_sliding
 from search.verifier import obj_verify
-from utilities.box2D import Box2D
 from utilities.trajectory import TrajectoryIntervalSeg
 
 
@@ -113,14 +112,10 @@ class BaseSliding:
             self.eq_push((tra.end, tra.id))
 
 
-def base_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
+def base_enumerate(trajs, labels: Mapping, duration_range, interval):
     label_verifier = partial(obj_verify, labels)
-    trajs = naive_merge_segments(data_pack, region, labels, duration_range[0], interval)
-    if trajs:
-        partial_res = BaseSliding(trajs, interval, duration_range[0], label_verifier)
-        return state_sliding(partial_res, label_verifier, base_maintainer)
-    else:
-        return iter([])
+    partial_res = BaseSliding(trajs, interval, duration_range[0], label_verifier)
+    return state_sliding(partial_res, label_verifier, base_maintainer)
 
 
 def base_maintainer(prev_end, prev, new_len, count, to_absorb):

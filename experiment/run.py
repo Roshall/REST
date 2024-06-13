@@ -6,12 +6,10 @@ from time import perf_counter as now
 from configs import cfg
 from ext_index.builder import load_traj_seg, build_rest
 from scripts.border import load_ext_index_meta, border_stride
-from search.base import base_search
-from search.baseline.search_methods import sliding_framework
-from search.max_dur_first import max_dur_first_search
-from search.max_obj import max_obj_search
+from search.sliding_based.framework import sliding_framework
+
+from search.index_based.framework import index_based_framework
 from utilities.box2D import Box2D
-from utilities.dataset import load_yolo_for
 
 
 def build_index(fname):
@@ -29,15 +27,7 @@ def build_index(fname):
 def init(query_type, trajs_info):
     match query_type:
         case ('index', mtd_str):
-            match mtd_str:
-                case 'max_dur':
-                    search_mtd = max_dur_first_search
-                case 'base':
-                    search_mtd = base_search
-                case 'max_obj':
-                    search_mtd = max_obj_search
-                case _:
-                    raise ValueError(f'No index based {mtd_str} found')
+            search_mtd = partial(index_based_framework, method=mtd_str)
         case ('sliding', mtd_str):
             search_mtd = partial(sliding_framework, method=mtd_str)
         case _:
@@ -59,9 +49,9 @@ def count_result(mtd_str, searcher):
     print('-'.join(mtd_str), 'result count:', count, 'using', end - start, 's')
 
 
-def find_bug(query_c):
-    mtds_str = [('index', 'max_obj'), ('index', 'max_dur')]
-    searchers = [query(mtd_n, data, query_c) for mtd_n in mtds_str]
+def find_bug(query_c, run):
+    mtds_str = [('index', 'max_obj'), ('index', 'max_dur_multi')]
+    searchers = [query(mtd_n, run, query_c) for mtd_n in mtds_str]
     res = [set((frozenset(ids), (s, e)) for ids, s, e in scher) for scher in searchers]
     for scher, r in zip(searchers, res):
         print(scher.__class__.__name__, len(r))
@@ -82,8 +72,8 @@ if __name__ == '__main__':
     file_path = os.path.join(cfg.DATA.PATH, f'{dataset_name}.pkl')
     # run the index based
     data_index = build_index(file_path)
-    # mtds_index = [('index', imtd) for imtd in ('max_obj', 'max_dur', 'base')]
-    mtds_index = [('index', imtd) for imtd in ('max_obj', 'max_dur')]
+    mtds_index = [('index', imtd) for imtd in ('max_obj', 'max_dur_multi', 'max_dur_one', 'base')]
+    # mtds_index = [('index', imtd) for imtd in ('max_dur_multi', 'max_dur_one')]
     # run the sliding based
     # data_raw, _, _ = load_yolo_for(file_path)
     # mtds_sliding = [('sliding', smtd) for smtd in ('naive', 'state')]
@@ -92,4 +82,4 @@ if __name__ == '__main__':
         searcher = query(mtd, data, query_content)
         count_result(mtd, searcher)
 
-    # res = find_bug(query_content)
+    # res = find_bug(query_content, data_index)

@@ -1,11 +1,11 @@
 from functools import partial
 
-from search.base import base_maintainer
-from search.baseline.search_methods import sliding_framework
+from search.index_based.base import base_maintainer
+from search.sliding_based.framework import sliding_framework
 from search.co_moving import CoMovementPattern
 from search.rest import state_sliding
-from search.verifier import obj_verify, len_filter, df_filter
-from search.baseline.naive import NaiveSliding
+from search.verifier import obj_verify, df_filter
+from search.sliding_based.naive import NaiveSliding
 from test.index_test_helper import query4test
 from utilities.box2D import Box2D
 from utilities.data_preprocessing import group_by_frame

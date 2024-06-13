@@ -1,6 +1,6 @@
 from configs import cfg
-from search.base import BaseSliding, base_search, base_maintainer
-from search.max_obj import MaxObjNum
+from search.index_based.base import BaseSliding, base_enumerate, base_maintainer
+from search.index_based.max_obj import MaxObjNumEnumerator
 from search.rest import state_sliding, absorb
 from search.verifier import obj_verify
 from test.index_test_helper import grid_spt_tempo_idx_fake_data, query4test
@@ -41,7 +41,7 @@ class TestBaseSliding(object):
     def setup(self, *, method='max_obj'):
         match method:
             case 'max_obj':
-                gen = MaxObjNum
+                gen = MaxObjNumEnumerator
             case 'base':
                 gen = BaseSliding
             case _:
@@ -67,9 +67,9 @@ def test_base_search():
     spt_tempo = grid_spt_tempo_idx_fake_data(cfg)
 
     test1, test2 = query4test()
-    res = [(frozenset(ids), s, e) for ids, s, e in base_search(spt_tempo, *test1)]
+    res = [(frozenset(ids), s, e) for ids, s, e in base_enumerate(spt_tempo, *test1)]
     assert res == [(frozenset([2, 3, 1]), 5, 10), (frozenset([3, 1]), 4, 10), (frozenset([1]), 1, 10)]
 
-    res = [(frozenset(ids), s, e) for ids, s, e in base_search(spt_tempo, *test2)]
+    res = [(frozenset(ids), s, e) for ids, s, e in base_enumerate(spt_tempo, *test2)]
     assert res == [(frozenset([5, 1, 3]), 9, 18), (frozenset([2, 4, 5, 3]), 11, 20), (frozenset([2, 4, 3]), 11, 22)]
 

@@ -2,7 +2,7 @@ from collections import Counter, deque
 from functools import partial
 from itertools import islice
 
-from search.base import base_maintainer
+from search.index_based.base import base_maintainer
 from search.co_moving import CoMovementPattern
 from search.rest import state_sliding
 from search.verifier import len_filter

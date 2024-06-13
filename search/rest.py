@@ -197,12 +197,8 @@ def absorb(trajectories: Mapping[int, Trajectory], duration):
                 yield TrajectoryIntervalSeg(tid, seq[0], traj.label, seq[-1] - 1)
 
 
-def naive_merge_segments(data_pack, region, labels: Mapping, dur, interval):
-    spat_tempo_idx, trajs = data_pack
-    for c in labels:
-        if c not in spat_tempo_idx:
-            return []
-    candidates, probation = zip(*(spat_tempo_idx[label].query(trajs, region.bbox, dur, interval, 0)
+def vanilla_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
+    candidates, probation = zip(*(rest_idx[label].query(trajs, region.bbox, dur, interval, 0)
                                   for label in labels))
     verified = chain(*probation, *(candidate_verified_queue(can, region, dur) for can in candidates))
     visited = {}
@@ -215,3 +211,34 @@ def naive_merge_segments(data_pack, region, labels: Mapping, dur, interval):
     trajs = list(absorb(visited, dur))
     trajs.sort(key=attrgetter('begin'))
     return trajs
+
+
+def stride_merge(rest_idx, trajs, region, labels: Mapping, dur, interval, minima=3000):
+    candidates, probation = zip(*(rest_idx[label].query(trajs, region.bbox, dur, interval, 1)
+                                  for label in labels))
+    verified = chain(*probation, *(candidate_verified_queue(can, region, dur) for can in candidates))
+    stride = max(dur * 2, minima)
+    end = interval[0] + stride
+    visited = {}
+    for seg in verified:
+        if (beg := seg.begin) < end:
+            if (old := visited.get(seg.id, None)) is None:
+                visited[seg.id] = Trajectory(seg.id, seg.label, [beg, seg.end])
+            else:
+                old.seg.extend([beg, seg.end])
+        else:
+            trajs = list(absorb(visited, dur))
+            trajs.sort(key=attrgetter('begin'))
+            yield from trajs
+            yield None, None
+            visited = {}
+            end = beg + stride
+
+
+def one_pass_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
+    candidates, probation = zip(*(rest_idx[label].query(trajs, region.bbox, dur, interval, 1)
+                                  for label in labels))
+    traj_it = heapq.merge(*probation,
+                          *(candidate_verified_queue(can, region, dur) for can in candidates),
+                          key=attrgetter('begin'))
+    return traj_it

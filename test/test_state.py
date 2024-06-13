@@ -1,6 +1,6 @@
 from typing import NamedTuple
 
-from search.baseline.state import state_maintain
+from search.sliding_based.state import state_maintain
 
 
 class Mock(NamedTuple):

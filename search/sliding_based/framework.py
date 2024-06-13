@@ -1,8 +1,8 @@
 from functools import partial
 
 from search.verifier import obj_verify, df_filter
-from search.baseline.naive import naive_slider
-from search.baseline.state import state_slider
+from search.sliding_based.naive import naive_slider
+from search.sliding_based.state import state_slider
 from utilities.data_preprocessing import group_by_frame
 
 

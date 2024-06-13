@@ -1,6 +1,6 @@
 from time import perf_counter as now
 
-from search.baseline.search_methods import sliding_framework
+from search.sliding_based.framework import sliding_framework
 from utilities.box2D import Box2D
 from utilities.dataset import load_yolo_for
 

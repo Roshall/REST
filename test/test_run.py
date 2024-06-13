@@ -5,7 +5,7 @@ import numpy as np
 from configs import cfg
 from search.rest import yield_co_move
 from search.verifier import candidate_verified_queue, verify_seg
-from search.max_dur_first import max_dur_first_search, MaxDurFirst
+from search.index_based.max_dur_first import max_dur_first_search, MaxDurFirst
 from test.index_test_helper import grid_spt_tempo_idx_fake_data, query4test
 from utilities.box2D import Box2D
 from utilities.trajectory import TrajectorySequenceSeg, TrajectoryIntervalSeg, BasicTrajectorySeg

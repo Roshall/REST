@@ -1,12 +1,11 @@
-from collections.abc import Mapping, Iterable
+from collections.abc import Iterable
 from functools import partial
 import heapq
 from itertools import chain, groupby, islice
 from operator import attrgetter
 
-from search.rest import heap_group_pop, naive_merge_segments
+from search.rest import heap_group_pop
 from search.verifier import label_verifier
-from utilities.box2D import Box2D
 
 
 class PatternPool:
@@ -79,8 +78,8 @@ class PatternPool:
         self.patterns = []
 
 
-class MaxObjNum:
-    def __init__(self, trajectories: Iterable, interval, dur, labels):
+class MaxObjNumEnumerator:
+    def __init__(self, trajectories: Iterable, labels, dur, interval):
         self.ts_grouped_traj = groupby(trajectories, key=attrgetter('begin'))
         self.interval = interval
         self.dur = dur - 1
@@ -181,8 +180,6 @@ class MaxObjNum:
         else:
             if self.end_q:
                 return start
-            else:
-                return
 
     def _add(self, trajs):
         for tra in trajs:
@@ -191,12 +188,3 @@ class MaxObjNum:
             self.label_counter[label] += 1
             self.label_m[tid] = label
             self.eq_push((tra.end, tid))
-
-
-def max_obj_search(data_pack, region: Box2D, labels: Mapping, duration_range, interval):
-    dur = duration_range[0]
-    trajs = naive_merge_segments(data_pack, region, labels, dur, interval)
-    if trajs:
-        return MaxObjNum(trajs, interval, dur, labels)
-    else:
-        return iter([])

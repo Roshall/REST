@@ -1,6 +1,6 @@
 import itertools
 
-from search.baseline.ssg import MarkedFrames, State, StateGraph
+from search.sliding_based.ssg import MarkedFrames, State, StateGraph
 
 
 class TestMarkedFrames:
