@@ -66,6 +66,10 @@ class Box2D:
         us_np = True if config is None else config.BOX_NP
         self.enclose = self.enclose_parallel if us_np else self.enclose_serial
 
+    def rest_bbox(self, bbox):
+        self.bbox = bbox
+        self._meta()
+
     def _meta(self):
         """
         build useful data for testing if a point within this box

@@ -66,6 +66,6 @@ class NaiveSliding:
             abandoned = win[0][1]['oid']
 
 
-def base_slider(frames, dur, obj_verifier, dfilter):
+def naive_slider(frames, dur, obj_verifier, dfilter):
     sliding = NaiveSliding(frames, dur, obj_verifier, dfilter)
     return state_sliding(sliding, obj_verifier, base_maintainer)
