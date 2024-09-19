@@ -1,4 +1,5 @@
 import os.path
+import re
 from itertools import pairwise
 import pickle
 import numpy as np
@@ -7,29 +8,39 @@ from ext_index.grid import Grid
 from traj_seg import TrajectorySequenceSeg
 from index_w import PyRestIndex
 
+from scripts.border import concatenate_stride
 from utilities.data_preprocessing import traj_data
 from utilities.dataset import load_yolo_for
 from utilities.key import generate_key
 
 
-def load_traj_seg(border_stride, fname, dataset_name, cfg):
-    filename = f'{dataset_name}_{border_stride[0]}'.replace('(', '').replace(')', '').replace(' ', '').replace(',', '_')
-    filename = generate_key(filename)
+def load_seg(trajs, ds_name, border_m, meta_path, space):
+    border_stride = concatenate_stride(border_m, space)
+    filename = generate_key(re.sub('[() ]', '',f'{ds_name}'
+                                               f'_{border_stride[0]}').replace(
+        ',', '_'))
+    file_path = os.path.join(meta_path, f'{filename}.pkl')
+    if os.path.exists(file_path):
+        with open(file_path, 'rb') as f:
+            segs = pickle.load(f)
+    else:
+        segs = save_seg(trajs, border_stride, file_path)
+    return segs
+
+
+def load_traj_seg(border_m, fname, dataset_name, cfg):
+    # trajectories list
     file_path = os.path.join(cfg.INDEX.META_PATH, f'{dataset_name}_traj.pkl')
     if os.path.exists(file_path):
         with open(file_path, 'rb') as f:
             trajs = pickle.load(f)
     else:
         df, cols, cls_m = load_yolo_for(fname)
-        trajs_raw = traj_data(df, cols, cls_m, cfg.DATA.STRIDE, scale=cfg.DATA.SCALE, cls=list(border_stride))
+        trajs_raw = traj_data(df, cols, cls_m, cfg.DATA.STRIDE, scale=cfg.DATA.SCALE, cls=list(border_m))
         trajs = save_traj(trajs_raw, file_path)
-    file_path = os.path.join(cfg.INDEX.META_PATH, f'{filename}.pkl')
-    if os.path.exists(file_path):
-        with open(file_path, 'rb') as f:
-            segs = pickle.load(f)
-    else:
-        segs = save_seg(trajs, border_stride, file_path)
-    return trajs, segs
+
+    return trajs, load_seg(trajs, dataset_name, border_m,
+                           cfg.INDEX.META_PATH, cfg.INDEX.REGION.GRID.SPACE)
 
 
 def build_rest(trajs, segs, border_m):
