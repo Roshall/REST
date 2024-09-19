@@ -63,12 +63,15 @@ class Box2D:
         self.bbox = bbox
         self._test_meta = None
         self._meta()
-        us_np = True if config is None else config.BOX_NP
-        self.enclose = self.enclose_parallel if us_np else self.enclose_serial
+        vectorization = True if config is None else config.BOX_NP
+        self.enclose = self.enclose_parallel if vectorization else self.enclose_serial
 
     def rest_bbox(self, bbox):
         self.bbox = bbox
         self._meta()
+
+    def set_vectorization(self, enable):
+        self.enclose = self.enclose_parallel if enable else self.enclose_serial
 
     def _meta(self):
         """
