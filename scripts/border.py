@@ -28,21 +28,30 @@ def region_border(df, cls: Iterable[int]):
 
 
 def border_meta(df, tempo_stride=60):
-    border = {}
+    bor = {}
     border_by_cls = life_border_cls_top(df)
     reg_border_by_cls = region_border(df, border_by_cls)
     for c, life_border in border_by_cls.items():
-        border[c] = {'life_border': life_border, 'reg_border': reg_border_by_cls[c],
-                     'tempo_stride': tempo_stride}
-    return border
+        bor[c] = {'life_border': life_border, 'reg_border': reg_border_by_cls[c],
+                  'tempo_stride': tempo_stride}
+    return bor
 
 
-def border_stride(border, space):
-    border = np.asarray(border).reshape(-1, 2)
-    stride = (border[:, 1] - border[:, 0] - 1) // np.asarray(space) + 1
-    bor_st = list(border[0])
+def concatenate_stride(bor_m, space):
+    bs_m = {}
+    for c, bor in bor_m.items():
+        bs = border_stride(bor['reg_border'], space)
+        bs_m[c] = bs
+        bor['border_stride'] = bs
+    return bs_m
+
+
+def border_stride(bor, space):
+    bor = np.asarray(bor).reshape(-1, 2)
+    stride = (bor[:, 1] - bor[:, 0] - 1) // np.asarray(space) + 1
+    bor_st = list(bor[0])
     bor_st.append(stride[0])
-    bor_st.extend(border[1])
+    bor_st.extend(bor[1])
     bor_st.append(stride[1])
     return bor_st
 
@@ -63,8 +72,8 @@ if __name__ == '__main__':
     jsonpath = os.path.join(cfg.INDEX.META_PATH, dataset_name + '.json')
     if not os.path.exists(jsonpath):
         filepath = os.path.join(path, f'{dataset_name}.pkl')
-        df, _, _ = dataset.load_yolo_for(filepath)
-        border = border_meta(df)
+        df_t, _, _ = dataset.load_yolo_for(filepath)
+        border = border_meta(df_t)
 
         json.dump(border, open(jsonpath, 'w'), indent=4)
     else:
