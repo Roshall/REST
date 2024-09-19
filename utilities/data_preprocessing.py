@@ -1,4 +1,7 @@
+from collections import UserList
+
 import numpy as np
+import pandas as pd
 
 
 def view_field(xy):
@@ -30,16 +33,16 @@ def traj_data(tracks, cols_name: list, label_map, stride, scale=100, cls=None):
             trajs = t[cols_name[-2:]].to_numpy(copy=True)
         if scale != 1:
             trajs *= scale
-        yield tid, start_frame,  cls_id,  trajs
+        yield tid, start_frame, cls_id, trajs
 
 
 def gen_border(bbox, xy_num):
     xmin, xmax, ymin, ymax = bbox
     x_num, y_num = xy_num
     x_series = np.linspace(xmin, xmax, x_num, dtype=int)
-    x_series = np.append(x_series, x_series[-1]+1)
+    x_series = np.append(x_series, x_series[-1] + 1)
     y_series = np.linspace(ymin, ymax, y_num, dtype=int)
-    y_series = np.append(y_series, y_series[-1]+1)
+    y_series = np.append(y_series, y_series[-1] + 1)
     return x_series, y_series
 
 
@@ -61,25 +64,86 @@ def group_by_frame(df, interval):
     return df.groupby('fid')
 
 
-def traj_interp(np_arr, center=True):
-    import pandas as pd
+def chunks(chunk_size, num):
+    chunk_series = []
+    while num > chunk_size:
+        chunk_series.append(chunk_size)
+        num -= chunk_size
+    if num != 0:
+        chunk_series.append(num)
+    return chunk_series
 
+
+class SingleRun(UserList):
+    def __init__(self, header, dtypes):
+        super().__init__()
+        self.header = header
+        self.dtypes = dtypes
+
+    def merge(self):
+        run = np.concatenate(self)
+        return (pd.DataFrame(run, columns=self.header).
+                astype(dict(zip(self.header, self.dtypes))))
+
+
+class ChunkRun:
+    def __init__(self, chunk_size, header, dtypes):
+        self.merge_ls = []
+        self.interp_ls = SingleRun(header, dtypes)
+        self.chunk_size = chunk_size
+        self.csize = 0
+        self.header = header
+
+    def append(self, item):
+        if self.csize >= self.chunk_size:
+            self.merge_ls.append(self.interp_ls.merge())
+            self.interp_ls.clear()
+            self.csize = 0
+        self.interp_ls.append(item)
+        self.csize += item.nbytes
+
+    def merge(self):
+        ml = self.merge_ls
+        if self.interp_ls:
+            ml.append(self.interp_ls.merge())
+        if len(ml) > 1:
+            return pd.concat(ml, ignore_index=True)
+        else:
+            return ml[0]
+
+
+def run_factory(chunk_size, header, dtypes):
+    if chunk_size is None:
+        return SingleRun(header, dtypes)
+    else:
+        return ChunkRun(chunk_size, header, dtypes)
+
+
+def centering_sort_by_oid(np_arr, center):
     np_arr[:, 3] += np_arr[:, 5]
     np_arr[:, 3] //= 2
     if center:
-        np_arr[:, 4] += np_arr[:, 6]
-        np_arr[:, 4] //= 2
+        np_arr[:, 6] += np_arr[:, 4]
+        np_arr[:, 6] //= 2
 
-    header = ['oid', 'cls', 'fid', 'x', 'y']
     # sort by oid
-    np_arr = np_arr[np.argsort(np_arr[:, 0]), :5]
+    return np_arr[np.argsort(np_arr[:, 0]).reshape(-1, 1), [*range(4), 6]]
+
+
+def traj_interp(np_arr, center=True, chunk_size=None):
+    if chunk_size is None:
+        np_arr = centering_sort_by_oid(np_arr, center)
+    header = ['oid', 'cls', 'fid', 'x', 'y']
     # group by objects
     diff = np.flatnonzero(np.diff(np_arr[:, 0], prepend=np_arr[0, 0]))
     group_by_id = np.split(np_arr, diff)
-    id_num = len(group_by_id)
-    print('total #id:', id_num, '\n')
-    interp_ls = [None] * id_num
-    for i, group in enumerate(group_by_id):
+    id_num = np.flatnonzero(np.diff(diff) > 1).size
+    del diff
+    runner = run_factory(chunk_size, header, (np.int32, np.uint8, np.int32, np.uint16, np.uint16))
+    count = 0
+    for group in group_by_id:
+        if len(group) == 1:
+            continue
         group = group[np.argsort(group[:, 2])]
         fids = group[:, 2]
 
@@ -87,7 +151,7 @@ def traj_interp(np_arr, center=True):
         vals, counts = np.unique(group[:, 1], return_counts=True)
         mod = vals[np.argmax(counts)]  # mode as revised class id
         if len(group) != max_ - min_ + 1:  # interpolate
-            interp_fids = np.arange(min_, max_+1)
+            interp_fids = np.arange(min_, max_ + 1)
             interp = np.empty((len(interp_fids), len(header)), dtype=np.int32)
             interp[:, 0] = group[0, 0]
             interp[:, 2] = interp_fids
@@ -96,13 +160,17 @@ def traj_interp(np_arr, center=True):
         else:
             interp = group
         interp[:, 1] = mod  # revise class id
+        runner.append(interp)
+        count += 1
+        if count % 8000 == 0:
+            print(f'\r{count}/{id_num}', end='')
+    del group, group_by_id, np_arr
+    print(f'\rinterpolation done. merging into pandas DataFrame...')
+    return runner.merge()
 
-        interp_ls[i] = interp
-        if i % 5000 == 0:
-            print(f'\r{i}/{id_num}', end='')
-    print('\nmerging...')
-    merged = np.concatenate(interp_ls)
-    return pd.DataFrame(merged, columns=header).astype(dict(zip(header, (np.int32, np.uint8, np.int32, np.uint16, np.uint16))))
+
+def debug_inter():
+    data = np.arange(32).reshape(-1, 5)
 
 
 if __name__ == '__main__':
