@@ -22,7 +22,7 @@ def interval_exp(default_query: dict, interval_meta: Mapping,
         yield query_cand
 
 
-def duration_exp(default_query, dur_meta, ds_name, clip_long):
+def duration_exp(default_query, dur_meta, ds_name):
     query_cand = copy.deepcopy(default_query)
     if not isinstance(dur_meta, list) or len(dur_meta) != 3:
         raise ValueError('dur_meta must be a list of length 3')
@@ -33,14 +33,14 @@ def duration_exp(default_query, dur_meta, ds_name, clip_long):
         yield query_cand
 
 
-def region_exp(default_query: dict, region_meta: Mapping, ds_name, clip_long):
+def region_exp(default_query: dict, region_meta: Mapping, ds_name):
     query_cand = copy.deepcopy(default_query)
     for bboxes in region_meta['bboxes'][ds_name]:
         query_cand['region'] = bboxes
         yield query_cand
 
 
-def obj_num_exp(default_query: dict, obj_meta, ds_name, clip_long):
+def obj_num_exp(default_query: dict, obj_meta, ds_name):
     query_cand = copy.deepcopy(default_query)
     if not isinstance(obj_meta, list) or len(obj_meta) != 3:
         raise ValueError('obj_meta must be a list of length 3')
@@ -51,7 +51,7 @@ def obj_num_exp(default_query: dict, obj_meta, ds_name, clip_long):
         yield query_cand
 
 
-def cat_num_exp(default_query: dict, cat_meta, ds_name, clip_long):
+def cat_num_exp(default_query: dict, cat_meta, ds_name):
     query_cand = copy.deepcopy(default_query)
     if not isinstance(cat_meta, list):
         raise ValueError('cat_meta must be a list')
@@ -113,7 +113,7 @@ def run_one_exp(search_mtd, plans, region_num, repeat):
 
 
 def run_all_exp(mtds_str, ds_path, ds_full_name, dsname, exps, ori_plan,
-                q_meta, ds_lf, region_num, repeat):
+                q_meta, region_num, repeat):
     for framework, group in groupby(mtds_str, key=lambda x: x.split('_')[0]):
         match framework:
             case 'index':
@@ -125,7 +125,7 @@ def run_all_exp(mtds_str, ds_path, ds_full_name, dsname, exps, ori_plan,
         for mtd_str in group:
             search_mtd = query_init(mtd_str, data_pack)
             for exp in exps:
-                plans = func_m[exp](ori_plan, q_meta[exp], dsname, ds_lf)
+                plans = func_m[exp](ori_plan, q_meta[exp], dsname)
                 print(mtd_str, exp)
                 run_one_exp(search_mtd, plans, region_num, repeat)
 
@@ -208,10 +208,9 @@ if __name__ == '__main__':
             pass
     for ds, ds_pth in zip(desired_ds, ds_pths):
         re_plan = copy.deepcopy(dft_plan)
-        lf = dataset[ds]['clip_long']
         regions = query_meta['region']['bboxes'][ds]
         refine_region(re_plan, regions)
-        refine_interval(re_plan, query_meta, lf)
+        refine_interval(re_plan, query_meta)
         ds_full = full_name(dataset, [ds])[0]
         if run_grid:
             for m in mtds:
@@ -220,4 +219,4 @@ if __name__ == '__main__':
             run_grid_exp(mtds, re_plan, grid_scale, reg_num, args.repeat)
         else:
             run_all_exp(mtds, ds_pth, ds_full, ds, desired_exp, re_plan,
-                        query_meta, lf, reg_num, args.repeat)
+                        query_meta, reg_num, args.repeat)

@@ -6,7 +6,8 @@ def abbr_map(data):
 
 
 def full_name(data_m, desideratum):
-    return list(f'{name}{data_m[name]['clip_long']}' for name in desideratum)
+    return list(f'{name}10h.{data_m[name]['extension']}' for name in
+                desideratum)
 
 
 def gather_all(opt, data_m):
@@ -62,9 +63,9 @@ def default_plan(default):
     # dataset name
 
 
-def refine_interval(plan, plan_meta, lf):
+def refine_interval(plan, plan_meta):
     idx = plan['interval'][1]
-    plan['interval'][1] = plan_meta['interval'][lf][idx] * 30 * 60
+    plan['interval'][1] = plan_meta['interval']['10h'][idx] * 30 * 60
 
 
 def refine_region(plan, reg_meta):
