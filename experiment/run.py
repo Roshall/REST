@@ -4,40 +4,16 @@ from itertools import chain
 from time import perf_counter as now
 
 from configs import cfg
-from ext_index.builder import load_traj_seg, build_rest
-from scripts.border import load_ext_index_meta, border_stride
-from search.sliding_based.framework import sliding_framework
+from utilities.query import  query_init, build_index
 
-from search.index_based.framework import index_based_framework
 from utilities.box2D import Box2D
 
 
-def build_index(fname):
-    bor_m = load_ext_index_meta(os.path.join(cfg.INDEX.META_PATH, f'{dataset_name}.json'))
-    bs_m = {}
-    for c, border in bor_m.items():
-        bs = border_stride(border['reg_border'], cfg.INDEX.REGION.GRID.SPACE)
-        bs_m[c] = bs
-        border['border_stride'] = bs
-    trajs, segs = load_traj_seg(bs_m, fname, dataset_name, cfg)
-    spt_idx = build_rest(trajs, segs, bor_m)
-    return spt_idx, trajs
 
-
-def init(query_type, trajs_info):
-    query_type = query_type.split('_')
-    match query_type:
-        case ('index', *mtd_str):
-            search_mtd = partial(index_based_framework, method=mtd_str)
-        case ('sliding', *mtd_str):
-            search_mtd = partial(sliding_framework, method=mtd_str)
-        case _:
-            raise ValueError(f'wrong query type: {cfg.QUERY}')
-    return partial(search_mtd, trajs_info)
 
 
 def query(mtd_str, trajs_info, content):
-    search_mtd = init(mtd_str, trajs_info)
+    search_mtd = query_init(mtd_str, trajs_info)
     return search_mtd(*content.values())
 
 

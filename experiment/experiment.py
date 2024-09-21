@@ -5,7 +5,7 @@ from itertools import groupby, islice
 from configs import cfg
 from ext_index.builder import load_seg, build_rest
 from profile import Profile
-from run import build_index, query_init
+from utilities.query import build_index, query_init
 from helper import *
 from scripts.border import load_ext_index_meta
 from utilities.dataset import load_yolo_for
@@ -109,6 +109,7 @@ def run_one_exp(search_mtd, plans, region_num, repeat):
         results.append((count / region_num,
                         pos.t / (repeat * region_num)))
         print(results)
+        return results
 
 
 def run_all_exp(mtds_str, ds_path, ds_full_name, dsname, exps, ori_plan,
