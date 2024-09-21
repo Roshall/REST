@@ -62,6 +62,9 @@ def cat_num_exp(default_query: dict, cat_meta, ds_name):
         query_cand['pattern'] = {obj: 1 for obj in cat_ls[:idx]}
         yield query_cand
 
+def default_exp(default_query: dict, region_meta: Mapping, ds_name):
+    yield default_query
+
 
 def mod_grid(grid_meta: Mapping):
     """
@@ -86,7 +89,8 @@ def argument_region(o_plans, rnum):
 
 
 func_m = {'region': region_exp, 'obj_num': obj_num_exp, 'cat_num': cat_num_exp,
-          'interval': interval_exp, 'duration': duration_exp}
+          'interval': interval_exp, 'duration': duration_exp,
+          'default': default_exp}
 
 
 def run_one_exp(search_mtd, plans, region_num, repeat):
@@ -193,7 +197,6 @@ if __name__ == '__main__':
         query_meta = json.load(open(os.path.join(dataset_pth, 'query_plans.json')))
     dft_plan = default_plan(query_meta['default'])
     grid_scale = query_meta.pop('grid_scale')
-    del query_meta['default']
     if args.grid:
         cfg.BOX_NP = False
         cfg.INDEX.REGION.GRID.SPACE = (1, 1)

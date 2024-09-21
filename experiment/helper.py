@@ -12,7 +12,11 @@ def full_name(data_m, desideratum):
 
 def gather_all(opt, data_m):
     if opt == 'all':
+        data_m = data_m.copy()
+        data_m.pop('default', None)
         return list(data_m.values())
+    elif opt == 'default':
+        return [opt]
     else:
         cand = set(opt)
         if not cand.issubset(data_m.keys()):
