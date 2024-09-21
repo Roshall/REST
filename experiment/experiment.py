@@ -186,7 +186,7 @@ if __name__ == '__main__':
     dataset_pth = os.path.join(os.path.dirname(__file__), 'query_configs')
     dataset = json.load(open(os.path.join(dataset_pth, 'dataset.json')))
     desired_ds = gather_all(args.dataset, abbr_map(dataset))
-    ds_pths = [os.path.join(cfg.DATA.PATH, f'{ds}.pkl') for ds in full_name(dataset, desired_ds)]
+    ds_pths = [os.path.join(cfg.DATA.PATH, ds) for ds in full_name(dataset, desired_ds)]
     # search method
     mtds = which_mth(args.search_method)
     # experiment
