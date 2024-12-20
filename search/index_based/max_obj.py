@@ -13,48 +13,46 @@ class PatternPool:
         self.patterns = []
         self.end = 0
 
-    def concatenate(self, obj_m, label_count, start, end):
+    def concatenate(self, objs_m, label_count, start, end):
+        objs = set(objs_m)
         if not self.patterns:
-            self.patterns = [(obj_m, start)]
+            self.patterns = [(objs, start)]
             self.end = end
             return
         elif start > (end_l := self.end):
-            for objs, s in self.patterns:
-                yield objs.keys(), s, end_l
-            self.patterns = [(obj_m, start)]
+            for p_objs, s in self.patterns:
+                yield p_objs, s, end_l
+            self.patterns = [(objs, start)]
             self.end = end
             return
 
         new = []
         count = 0
         adopt = False
-        cur = obj_m
+        cur = objs
         for p, ps in self.patterns:
-            ckeys, pkeys = cur.keys(), p.keys()
-            clen, plen = len(ckeys), len(pkeys)
+            clen, plen = len(cur), len(p)
 
             if clen > plen:
-                if ckeys > pkeys:
+                if cur > p:
                     new.append((cur, start))
                     adopt = True
                     break
             elif clen < plen:
-                if ckeys < pkeys:
+                if cur < p:
                     start = ps
                     count += 1
                     continue
             elif clen == plen:
-                if ckeys == pkeys:
+                if cur == p:
                     adopt = True
                     break
 
             new.append((cur, start))
             # update new pattern
-            p_new = cur.copy()
-            for o, l in cur.items():
-                if o not in p:
-                    label_count[l] -= 1
-                    del p_new[o]
+            p_new = cur & p
+            for o in cur - p_new:
+                label_count[objs_m[o]] -= 1
 
             if label_verifier(label_count):
                 start = ps
@@ -66,15 +64,15 @@ class PatternPool:
             new.append((cur, start))
 
         p_iter = iter(self.patterns)
-        for obj_m, s in islice(p_iter, count if adopt else None):
-            yield obj_m.keys(), s, self.end
+        for objs, s in islice(p_iter, count if adopt else None):
+            yield objs, s, self.end
         new.extend(p_iter)
         self.patterns = new
         self.end = end
 
     def pop_all(self):
-        for pat, start in self.patterns:
-            yield pat.keys(), start, self.end
+        for objs, start in self.patterns:
+            yield objs, start, self.end
         self.patterns = []
 
 
@@ -107,7 +105,7 @@ class MaxObjNumEnumerator:
                     # must >= ts + dur_l.
                     if (end := self.end_q[0][0]) < end_min:
                         if self.label_verify():
-                            yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, end)
+                            yield from ppool.concatenate(self.label_m, self.label_counter.copy(), last_s, end)
                             self._remove()
                         else:
                             self._remove()
@@ -120,7 +118,7 @@ class MaxObjNumEnumerator:
                             break  # no need to find end >= ts
                     else:  # found the end >= ts + dur_l, construct the final window, and get out of the loop
                         if self.label_verify():
-                            yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, end)
+                            yield from ppool.concatenate(self.label_m, self.label_counter.copy(), last_s, end)
                         else:
                             # impossible concatenate
                             yield from ppool.pop_all()
@@ -132,16 +130,16 @@ class MaxObjNumEnumerator:
 
         yield from self._wrapup(ppool, last_s, terminal)
 
-    def _wrapup(self, ppool, last_s, terminal):
+    def _wrapup(self, ppool, last_s, terminal_t):
         # Note: the following output may fail the duration constraints.
         # However, we must keep them in case they can be concatenated to the last window.
         while self.end_q:
             if self.label_verify():
-                if self.end_q[0][0] < terminal:
-                    yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, self.end_q[0][0])
+                if self.end_q[0][0] < terminal_t:
+                    yield from ppool.concatenate(self.label_m, self.label_counter.copy(), last_s, self.end_q[0][0])
                     self._remove()
                 else:
-                    yield from ppool.concatenate(self.label_m.copy(), self.label_counter.copy(), last_s, terminal)
+                    yield from ppool.concatenate(self.label_m, self.label_counter.copy(), last_s, terminal_t)
                     break
             else:
                 break
@@ -153,6 +151,8 @@ class MaxObjNumEnumerator:
         for pat, start in ppool.patterns:
             if start <= max_start:
                 yield pat.keys(), start, end
+            else:
+                break
 
     def _remove(self):
         for tid in self.eq_group_pop():
