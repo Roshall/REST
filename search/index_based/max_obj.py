@@ -1,6 +1,6 @@
+import heapq
 from collections.abc import Iterable
 from functools import partial
-import heapq
 from itertools import chain, groupby, islice
 from operator import attrgetter
 
@@ -65,20 +65,28 @@ class PatternPool:
 
         p_iter = iter(self.patterns)
         for objs, s in islice(p_iter, count if adopt else None):
-            yield objs, s, self.end
+            yield list(objs), s, self.end
         new.extend(p_iter)
         self.patterns = new
         self.end = end
 
     def pop_all(self):
         for objs, start in self.patterns:
-            yield objs, start, self.end
+            yield list(objs), start, self.end
         self.patterns = []
+        self._levels = {}
+
+    def iter_until(self, max_start):
+        for objs, start in self.patterns:
+            if start <= max_start:
+                yield list(objs), start, self.end
+            else:
+                break
 
 
 class MaxObjNumEnumerator:
     def __init__(self, trajectories: Iterable, labels, dur, interval):
-        self.ts_grouped_traj = groupby(trajectories, key=attrgetter('begin'))
+        self.ts_grouped_traj = groupby(trajectories, key=attrgetter("begin"))
         self.interval = interval
         self.dur = dur - 1
         self.end_q = []
@@ -105,7 +113,9 @@ class MaxObjNumEnumerator:
                     # must >= ts + dur_l.
                     if (end := self.end_q[0][0]) < end_min:
                         if self.label_verify():
-                            yield from ppool.concatenate(self.label_m, self.label_counter.copy(), last_s, end)
+                            yield from ppool.concatenate(
+                                self.label_m, self.label_counter.copy(), last_s, end
+                            )
                             self._remove()
                         else:
                             self._remove()
@@ -118,7 +128,9 @@ class MaxObjNumEnumerator:
                             break  # no need to find end >= ts
                     else:  # found the end >= ts + dur_l, construct the final window, and get out of the loop
                         if self.label_verify():
-                            yield from ppool.concatenate(self.label_m, self.label_counter.copy(), last_s, end)
+                            yield from ppool.concatenate(
+                                self.label_m, self.label_counter.copy(), last_s, end
+                            )
                         else:
                             # impossible concatenate
                             yield from ppool.pop_all()
@@ -136,23 +148,24 @@ class MaxObjNumEnumerator:
         while self.end_q:
             if self.label_verify():
                 if self.end_q[0][0] < terminal_t:
-                    yield from ppool.concatenate(self.label_m, self.label_counter.copy(), last_s, self.end_q[0][0])
+                    yield from ppool.concatenate(
+                        self.label_m,
+                        self.label_counter.copy(),
+                        last_s,
+                        self.end_q[0][0],
+                    )
                     self._remove()
                 else:
-                    yield from ppool.concatenate(self.label_m, self.label_counter.copy(), last_s, terminal_t)
+                    yield from ppool.concatenate(
+                        self.label_m, self.label_counter.copy(), last_s, terminal_t
+                    )
                     break
             else:
                 break
 
         # ppool contains the pattern to be concatenated
         # finally, we check their duration and pop them out.
-        end = ppool.end
-        max_start = end - self.dur
-        for pat, start in ppool.patterns:
-            if start <= max_start:
-                yield pat.keys(), start, end
-            else:
-                break
+        yield from ppool.pop_until(ppool.end - self.dur)
 
     def _remove(self):
         for tid in self.eq_group_pop():
