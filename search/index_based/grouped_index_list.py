@@ -30,16 +30,18 @@ class EntryRef:
 
 class GroupedIndexedList(Generic[T]):
     """
-    Flat-list grouped container with fast key lookup.
+    Flat-list grouped container with global key lookup.
 
-    Invariants:
-    1. All entries live in self._entries.
-    2. Entries of the same group are adjacent.
-    3. Each group has a border pointer: [start, end).
-    4. Entries inside a group are sorted by key.
-    5. Group key ranges may overlap.
-    6. Lookup is handled by a global key index.
+    Performance-oriented version:
+    - base storage is one list
+    - entries of the same group are adjacent
+    - entries inside a group are sorted by key
+    - group key ranges may overlap
+    - keys must be globally unique
+    - lookup uses key -> (group_id, local_offset)
     """
+
+    __slots__ = ("_entries", "_groups", "_group_pos", "_key_index")
 
     def __init__(self) -> None:
         self._entries: list[Entry[T]] = []
@@ -53,6 +55,9 @@ class GroupedIndexedList(Generic[T]):
     def __len__(self) -> int:
         return len(self._entries)
 
+    def __bool__(self) -> bool:
+        return bool(self._entries)
+
     @property
     def group_count(self) -> int:
         return len(self._groups)
@@ -63,33 +68,31 @@ class GroupedIndexedList(Generic[T]):
         entries: Iterable[Entry[T] | tuple[int, T]],
         *,
         position: Optional[int] = None,
+        assume_unique: bool = False,
     ) -> None:
         """
         Insert a whole group.
 
-        Entries inside the group are sorted by key.
-
-        If position is None, append the group at the end.
-        Otherwise, insert before the group at that position.
+        If position is None, append the group.
+        If assume_unique=True, duplicate key checks are skipped.
         """
         if group_id in self._group_pos:
             raise ValueError(f"group already exists: {group_id!r}")
 
         group_entries = self._normalize_entries(entries)
-
         if not group_entries:
             raise ValueError("cannot insert an empty group")
 
         group_entries.sort(key=lambda e: e.key)
 
-        self._check_unique_keys_inside_group(group_entries)
-        self._check_global_key_conflicts(group_entries)
+        if not assume_unique:
+            self._check_unique_keys_inside_group(group_entries)
+            self._check_global_key_conflicts(group_entries)
 
         if position is None:
             position = len(self._groups)
-
-        if not 0 <= position <= len(self._groups):
-            raise IndexError("invalid group insertion position")
+        elif not 0 <= position <= len(self._groups):
+            raise IndexError(f"invalid group insertion position: {position}")
 
         start = self._groups[position - 1].end if position > 0 else 0
         count = len(group_entries)
@@ -102,11 +105,7 @@ class GroupedIndexedList(Generic[T]):
             meta.start += count
             meta.end += count
 
-        meta = GroupMeta(group_id=group_id, start=start, end=end)
-
-        self._groups.insert(position, meta)
-        self._group_pos[group_id] = position
-
+        self._groups.insert(position, GroupMeta(group_id, start, end))
         self._rebuild_group_pos_from(position)
 
         # Build key -> local ref.
@@ -114,15 +113,6 @@ class GroupedIndexedList(Generic[T]):
             self._key_index[entry.key] = EntryRef(group_id, offset)
 
     def delete_group(self, group_id: int) -> list[Entry[T]]:
-        """
-        Delete a whole group.
-
-        Key index cleanup only touches entries in this group.
-        Group border shifting only touches later groups.
-        """
-        if group_id not in self._group_pos:
-            raise KeyError(f"group not found: {group_id!r}")
-
         group_pos = self._group_pos[group_id]
         meta = self._groups[group_pos]
 
@@ -143,80 +133,65 @@ class GroupedIndexedList(Generic[T]):
             later_meta.end -= count
 
         self._rebuild_group_pos_from(group_pos)
-
         return removed
 
-    def truncate_tail_at(self, idx: int) -> None:
+    def truncate_tail_at(self, group_idx: int) -> None:
         """
-        Truncate a group by index.
+        Keep groups [0, group_idx), remove groups [group_idx, end).
 
-        Keep the left part and remove the right part.
+        group_idx == group_count is allowed and is a no-op.
         """
-        if not 0 <= idx < len(self._groups):
-            raise IndexError(f"group index out of bounds: {idx}")
+        if not 0 <= group_idx <= len(self._groups):
+            raise IndexError(f"group index out of bounds: {group_idx}")
+        if group_idx == len(self._groups):
+            return
 
-        meta = self._groups[idx]
+        cut = self._groups[group_idx].start
 
-        # Remove keys from global index.
-        for entry in self._entries[meta.start :]:
+        for entry in self._entries[cut:]:
             del self._key_index[entry.key]
 
-        del self._entries[meta.start :]
-        for later_meta in self._groups[idx:]:
-            del self._group_pos[later_meta.group_id]
-        del self._groups[idx:]
+        for meta in self._groups[group_idx:]:
+            del self._group_pos[meta.group_id]
 
-    def get_entries_by_group_idx(self, group_idx: int) -> tuple[int, list[Entry[T]]]:
-        """
-        Get entries of a group by group index.
-        """
-        if not 0 <= group_idx < len(self._groups):
-            raise IndexError(f"group index out of bounds: {group_idx}")
-
-        meta = self._groups[group_idx]
-        return meta.group_id, self._entries[meta.start : meta.end]
+        del self._entries[cut:]
+        del self._groups[group_idx:]
 
     def find(self, key: int) -> tuple[int, Entry[T]] | None:
-        """
-        Find an entry by key.
-
-        Average complexity: O(1)
-        """
         ref = self._key_index.get(key)
-
         if ref is None:
             return None
 
-        group_pos = self._group_pos[ref.group_id]
-        meta = self._groups[group_pos]
-
-        absolute_index = meta.start + ref.offset
-        return ref.group_id, self._entries[absolute_index]
+        meta = self._groups[self._group_pos[ref.group_id]]
+        return ref.group_id, self._entries[meta.start + ref.offset]
 
     def get(self, key: int, default=None):
-        entry = self.find(key)
-        return default if entry is None else entry[1].value
+        found = self.find(key)
+        return default if found is None else found[1].value
 
-    def iter_group(self, group_id: int) -> Iterator[Entry[T]]:
-        if group_id not in self._group_pos:
-            raise KeyError(f"group not found: {group_id!r}")
+    def group_at(self, group_idx: int) -> GroupMeta:
+        """Fast internal-style access. Do not mutate the returned meta."""
+        return self._groups[group_idx]
 
-        meta = self._groups[self._group_pos[group_id]]
-
+    def iter_group_idx(self, group_idx: int) -> Iterator[Entry[T]]:
+        meta = self._groups[group_idx]
         for i in range(meta.start, meta.end):
             yield self._entries[i]
 
+    def iter_entries_until_index(self, end: int) -> Iterator[Entry[T]]:
+        for i in range(end):
+            yield self._entries[i]
+
+    def get_entries_by_group_idx(self, group_idx: int) -> tuple[int, list[Entry[T]]]:
+        meta = self._groups[group_idx]
+        return meta.group_id, self._entries[meta.start : meta.end]
+
+    def iter_group(self, group_id: int) -> Iterator[Entry[T]]:
+        yield from self.iter_group_idx(self._group_pos[group_id])
+
     def group_meta(self, group_id: int) -> GroupMeta:
-        if group_id not in self._group_pos:
-            raise KeyError(f"group not found: {group_id!r}")
-
         meta = self._groups[self._group_pos[group_id]]
-
-        return GroupMeta(
-            group_id=meta.group_id,
-            start=meta.start,
-            end=meta.end,
-        )
+        return GroupMeta(meta.group_id, meta.start, meta.end)
 
     def entries(self) -> list[Entry[T]]:
         return list(self._entries)
@@ -224,27 +199,27 @@ class GroupedIndexedList(Generic[T]):
     def groups(self) -> list[GroupMeta]:
         return [GroupMeta(g.group_id, g.start, g.end) for g in self._groups]
 
+    def clear(self) -> None:
+        self._entries.clear()
+        self._groups.clear()
+        self._group_pos.clear()
+        self._key_index.clear()
+
     def _normalize_entries(
         self,
         entries: Iterable[Entry[T] | tuple[int, T]],
     ) -> list[Entry[T]]:
         result: list[Entry[T]] = []
-
         for item in entries:
             if isinstance(item, Entry):
-                key = item.key
-                value = item.value
+                result.append(item)
             else:
                 key, value = item
-
-            if not isinstance(key, int):
-                raise TypeError(f"entry key must be int, got {type(key).__name__}")
-
-            result.append(Entry(key, value))
-
+                result.append(Entry(key, value))
         return result
 
-    def _check_unique_keys_inside_group(self, entries: list[Entry[T]]) -> None:
+    @staticmethod
+    def _check_unique_keys_inside_group(entries: list[Entry[T]]) -> None:
         for a, b in zip(entries, entries[1:]):
             if a.key == b.key:
                 raise ValueError(f"duplicate key inside group: {a.key}")
@@ -260,29 +235,29 @@ class GroupedIndexedList(Generic[T]):
 
     def check_invariants(self) -> None:
         prev_end = 0
+        seen_keys: set[int] = set()
 
         for i, meta in enumerate(self._groups):
             if meta.start != prev_end:
                 raise AssertionError("groups are not adjacent")
-
             if meta.end <= meta.start:
                 raise AssertionError("empty group detected")
-
-            if self._group_pos[meta.group_id] != i:
+            if self._group_pos.get(meta.group_id) != i:
                 raise AssertionError("wrong group position map")
 
-            group_entries = self._entries[meta.start : meta.end]
-
-            for a, b in zip(group_entries, group_entries[1:]):
-                if a.key >= b.key:
+            prev_key: int | None = None
+            for offset, entry in enumerate(self._entries[meta.start : meta.end]):
+                if prev_key is not None and prev_key >= entry.key:
                     raise AssertionError("entries inside group are not sorted")
+                prev_key = entry.key
 
-            for offset, entry in enumerate(group_entries):
+                if entry.key in seen_keys:
+                    raise AssertionError(f"duplicate global key: {entry.key}")
+                seen_keys.add(entry.key)
+
                 ref = self._key_index.get(entry.key)
-
                 if ref is None:
                     raise AssertionError(f"missing key index for key {entry.key}")
-
                 if ref.group_id != meta.group_id or ref.offset != offset:
                     raise AssertionError(f"wrong key index for key {entry.key}")
 
@@ -290,9 +265,5 @@ class GroupedIndexedList(Generic[T]):
 
         if prev_end != len(self._entries):
             raise AssertionError("group borders do not cover all entries")
-
-    def clear(self) -> None:
-        self._entries.clear()
-        self._groups.clear()
-        self._group_pos.clear()
-        self._key_index.clear()
+        if len(self._key_index) != len(self._entries):
+            raise AssertionError("key index size mismatch")
