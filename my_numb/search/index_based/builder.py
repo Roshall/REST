@@ -17,7 +17,7 @@ def grid_meta(border_stride):
     meta = np.empty(6, dtype=np.int32)
     meta[:2] = border_stride[:4:3]  # lower_border, x y
     meta[2:4] = border_stride[2:6:3]  # stride, x y
-    box = border_stride[[0, 1, 3, 4]].reshape(-1, 2)
+    box = border_stride[np.array([0, 1, 3, 4])].reshape(-1, 2)
     box = (box[:, 1] - box[:, 0]) // meta[2:4] + 1
     meta[4] = box[0]  # col_num
     meta[5] = box[0] * box[1]  # size
@@ -40,47 +40,52 @@ def partition_traj(trajs, bs_m):
     grid_m = dict()
     for c, bs in bs_m.items():
         grid_m[c] = grid_meta(bs)
-    _, cls, _, point_offsets, points = trajs
-    offsets = np.zeros(len(cls) + 1, dtype=np.int32)
-    for i, c in enumerate(cls):
-        pos = where_is(points[point_offsets[i]:point_offsets[i + 1]], grid_m[c])
-        break_points = np.flatnonzero(np.diff(pos, prepend=-1, append=-1)).astype(np.int32)
+    package, points = trajs
+    cls, point_offsets = package[:, 2], package[:, 3]
+    offsets = package[:, -1]
+    offsets[0] = 0
+    for i in range(len(cls) -1):
+        pos = np.zeros(point_offsets[i + 1] - point_offsets[i] + 2, dtype=np.int32)
+        pos[1:-1] = where_is(points[point_offsets[i]:point_offsets[i + 1]], grid_m[cls[i]])
+        pos[0] = pos[-1] = -1
+        break_points = np.flatnonzero(np.diff(pos)).astype(np.int32)
         offsets[i + 1] = offsets[i] + len(break_points)
         seg_ls.extend(break_points)
-    return np.array(seg_ls), offsets
+    return np.array(seg_ls)
 
 
+@njit # large array, cannot cache
 def build_index(trajs, segs, life_stride_m):
-    ids, cls, begins, p_fs, points = trajs
-    s, s_fs = segs
-    for i, (tid, c, begin) in enumerate(zip(ids, cls, begins)):
-        seg = s[s_fs[i]:s_fs[i + 1]]
-        tp_start = p_fs[i]
-        t_life = p_fs[i + 1] - tp_start
-        life_stride = life_stride_m[c]
+    package, points = trajs
+    for i in range(len(package)-1):
+        begin, tid, cls, tp_start, so_start = package[i]
+        p_next, so_next = package[i + 1, -2:]
+        seg = segs[so_start:so_next]
+        t_life = p_next - tp_start
+        l_s = life_stride_m[cls]
         packed_tl_point = t_life << 32
         for si in range(len(seg) - 1):
             start, end = seg[si:si + 2]
             ts_beg = begin + start
-            seg_life_pos = (end - start) // life_stride * life_stride
-            cppyy.gbl.rest_add(c, packed_tl_point | pack_i16(points[tp_start + start]), pack_i32(seg_life_pos, i),
+            seg_life_pos = (end - start) // l_s * l_s
+            cppyy.gbl.rest_add(cls, packed_tl_point | pack_i16(points[tp_start + start]), pack_i32(seg_life_pos, i),
                                ts_beg)
 
 
-jit_module(nopython=True, cache=True)
+# jit_module(nopython=True, cache=True)
 
 def load_segments(trajs, dataset_name, border_m, meta_path, space):
-    seg_meta_file = os.path.join(meta_path, f'{dataset_name}{space}.npz')
-    fields = ['segs', 'offsets']
+    seg_meta_file = os.path.join(meta_path, f'{dataset_name}{space}.np')
     if os.path.exists(seg_meta_file):
+        concatenate_stride(border_m, space) # add border_stride to border_m
         seg_meta = np.load(seg_meta_file)
-        return tuple(seg_meta[f] for f in fields)
+        return seg_meta
     else:
         bs_m = Dict.empty(key_type=int32, value_type=int32[:])
         for c, bs in concatenate_stride(border_m, space).items():
             bs_m[c] = np.array(bs, dtype=np.int32)
         segs_meta = partition_traj(trajs, bs_m)
-        np.savez_compressed(seg_meta_file, **dict(zip(fields, segs_meta)))
+        np.save(seg_meta_file, segs_meta)
         return segs_meta
 
 
@@ -103,7 +108,7 @@ def save_index_meta(trajs_raw, field_name, file_path):
 
 def load_index_meta(border_m, fname, dataset_name, cfg):
     file_path = os.path.join(cfg.INDEX.META_PATH, f'{dataset_name}_namba_index_meta.npz')
-    fields = ['ids', 'cls', 'begins', 'offsets', 'points']
+    fields = ['b_i_c_pos_sos', 'points']
     if os.path.exists(file_path):
         trajs_dict = np.load(file_path)
         trajs = tuple(trajs_dict[f] for f in fields)
@@ -129,13 +134,13 @@ def flatten_border(cls, borders, border):
 def build_rest(trajs, segs, border_m):
     cppyy_init(cppyy)
     borders = []
-    life_stride_m = Dict.empty(key_type=int, value_type=int)
+    life_stride_m = Dict.empty(key_type=int64, value_type=int64)
     for c, border in border_m.items():
         flatten_border(c, borders, border)
         life_stride_m[c] = border['tempo_stride']
     cppyy.gbl.border_init(borders)
     build_index(trajs, segs, life_stride_m)
-    return tuple(*trajs, *segs), np.fromiter(border_m, dtype=np.int32, count=len(border_m))
+    return cppyy.gbl.rest_query
 
 
 if __name__ == '__main__':
@@ -161,6 +166,6 @@ if __name__ == '__main__':
     life_stride[0] = 60
     life_stride[1] = 60
     build_index(trajs, segs, life_stride)
-    uit, sit = cppyy.gbl.rest_query(0, [0, 400, 0, 500], 0, (0, 100), 1)
-    while sit.HasNext():
-        print(unpack_i32(sit.Next()))
+    cppyy.gbl.rest_query(0, [0, 400, 0, 500], 0, (0, 100), 1)
+    while cppyy.gbl.iter_has_next(1):
+        print(unpack_i32(cppyy.gbl.iter_next(1)))
