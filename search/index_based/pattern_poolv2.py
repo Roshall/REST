@@ -92,9 +92,12 @@ class PatternPool:
                     for entry in self.patterns.iter_entries_until_index(prefix_end)
                 )
 
+            # Emit cumulative objects at each dropped level.
             for i in range(remain_level_until, group_count):
                 group = self.patterns.group_at(i)
-                objects.extend(entry.key for entry in self.patterns.iter_group_idx(i))
+                objects.extend(
+                    entry.key for entry in self.patterns.iter_group_idx(i)
+                )
                 yield objects.copy(), group.group_id, self.end
 
             self.patterns.truncate_tail_at(remain_level_until)
@@ -106,11 +109,13 @@ class PatternPool:
                 # A valid old prefix remains. With a monotonic verifier, every
                 # larger prefix formed by appending new delta groups is valid.
                 for group_id, entries in sorted_new:
-                    self.patterns.insert_group(group_id, entries, assume_unique=True)
+                    self.patterns.insert_group(
+                        group_id, entries, assume_unique=True
+                    )
             else:
-                # No valid old prefix remains. We must not discard invalid early
-                # delta groups. Instead, merge them into the first cumulative
-                # prefix that satisfies label_verifier.
+                # No valid old prefix remains. We must not discard invalid
+                # early delta groups.  Instead, merge them into the first
+                # cumulative prefix that satisfies label_verifier.
                 self._append_new_groups_from_empty_prefix(
                     sorted_new,
                     objs_m,
