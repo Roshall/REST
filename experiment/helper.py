@@ -33,18 +33,50 @@ def gather_all(opt, data_m):
 # naive(v) state(t) max_dur(d) base(a) max_obj(j)
 #                    /    \
 #           one_pass(o)  multipass(u)
+#
+# C++ counterparts (prefix 'C', uppercase keys):
+#               |-cxx(C)-|
+#               /         \
+#   cxx_sliding(S)      cxx_index(I)
+#   /      \            /    |    \
+# V(naive) T(state)    D    A    J(max_obj)
+#                     /    \
+#                   O(one) U(multi)
 _mth_tree = {
     'b': ('', ['i', 's']), 's': ('sliding', ['t', 'v']), 'i': ('index', ['d', 'j', 'a']), 'v': ("naive", None, ['s']),
     't': ("state", None, ['s']), 'j': ("max_obj", None, ['i']), 'a': ("base", None, ['i']),
-    'd': ("max_dur", ['u', 'o']), 'o': ("one", None, ['i', 'j']), 'u': ("multi", None, ['i', 'j'])
+    'd': ("max_dur", ['u', 'o']), 'o': ("one", None, ['i', 'j']), 'u': ("multi", None, ['i', 'j']),
+    # C++ framework (uppercase keys to avoid multi-char key collisions)
+    'C': ('', ['I', 'S']),
+    'S': ('cxx_sliding', ['T', 'V']),
+    'I': ('cxx_index', ['D', 'J', 'A']),
+    'V': ("cxx_naive", None, ['S']),
+    'T': ("cxx_state", None, ['S']),
+    'J': ("cxx_max_obj", None, ['I']),
+    'A': ("cxx_base", None, ['I']),
+    'D': ("cxx_max_dur", ['U', 'O']),
+    'O': ("cxx_one", None, ['I', 'D']),
+    'U': ("cxx_multi", None, ['I', 'D']),
 }
 
 
 def _traverse_node(node, visited):
     if (children := node[1]) is None:
-        name = [_mth_tree[abbr][0] for abbr in node[2]]
-        name.append(node[0])
-        visited.append('_'.join(name))
+        raw_names = [_mth_tree[abbr][0] for abbr in node[2]]
+        is_cxx = node[0].startswith('cxx_')
+        if is_cxx:
+            # Strip 'cxx_' from every name component (parents and leaf),
+            # remove empties (from root 'C' node), then prepend 'cxx_'
+            # once so the final name is e.g. "cxx_index_max_dur_multi".
+            names = [n[4:] if n.startswith('cxx_') else n
+                     for n in raw_names]
+            names = [n for n in names if n]
+            leaf = node[0][4:]  # strip cxx_ from leaf name
+            names.append(leaf)
+            visited.append('cxx_' + '_'.join(names))
+        else:
+            raw_names.append(node[0])
+            visited.append('_'.join(raw_names))
     else:
         for child in children:
             _traverse_node(_mth_tree[child], visited)

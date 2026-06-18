@@ -9,6 +9,7 @@ from utilities.query import build_index, query_init
 from helper import *
 from scripts.border import load_ext_index_meta
 from utilities.dataset import load_yolo_for
+from search_cxx.cxx_search import CxxIndex, cxx_sliding_query as _cxx_sliding
 
 
 def interval_exp(default_query: dict, interval_meta: Mapping,
@@ -93,6 +94,35 @@ func_m = {'region': region_exp, 'obj_num': obj_num_exp, 'cat_num': cat_num_exp,
           'default': default_exp}
 
 
+def cxx_query_init(mtd_str, cxx_index, parquet_path, config):
+    """Create a search function bound to a pre-built C++ index.
+
+    mtd_str is e.g. 'cxx_index_max_dur_multi' or 'cxx_sliding_state'.
+    The C++ method name is extracted by stripping the 'cxx_' prefix and
+    the framework part ('index' / 'sliding').
+    """
+    parts = mtd_str.split('_')  # e.g. ['cxx', 'index', 'max', 'dur', 'multi']
+    # parts[0] = 'cxx', parts[1] = framework ('index' or 'sliding'),
+    # parts[2:] = C++ method tokens
+    cxx_method = '_'.join(parts[2:]) if len(parts) > 2 else ''
+
+    if parts[1] == 'index':
+        def search(region, pattern, duration, interval):
+            bbox = region.bbox if hasattr(region, 'bbox') else list(region)
+            return cxx_index.query(
+                bbox, pattern, duration[0], tuple(interval), cxx_method)
+        return search
+    elif parts[1] == 'sliding':
+        def search(region, pattern, duration, interval):
+            bbox = region.bbox if hasattr(region, 'bbox') else list(region)
+            return _cxx_sliding(
+                parquet_path, bbox, pattern, duration[0],
+                tuple(interval), cxx_method)
+        return search
+    else:
+        raise ValueError(f'unknown cxx framework: {parts[1]}')
+
+
 def run_one_exp(search_mtd, plans, region_num, repeat):
     for plan_g in argument_region(plans, region_num):
         pos = Profile()
@@ -124,10 +154,22 @@ def run_all_exp(mtds_str, ds_path, ds_full_name, dsname, exps, ori_plan,
                 data_pack = build_index(ds_path, ds_full_name, cfg)
             case 'sliding':
                 data_pack, _, _ = load_yolo_for(ds_path)
+            case 'cxx':
+                meta_file = os.path.join(cfg.INDEX.META_PATH,
+                                         f'{ds_full_name}.json')
+                cxx_idx = CxxIndex(
+                    ds_path, meta_file,
+                    cfg.INDEX.REGION.GRID.SPACE[0],
+                    cfg.INDEX.REGION.GRID.SPACE[1],
+                    cfg.DATA.STRIDE, cfg.DATA.SCALE)
+                data_pack = None  # not used for cxx
             case _:
                 raise ValueError(f'impossible framework: {framework}!!!')
         for mtd_str in group:
-            search_mtd = query_init(mtd_str, data_pack)
+            if framework == 'cxx':
+                search_mtd = cxx_query_init(mtd_str, cxx_idx, ds_path, cfg)
+            else:
+                search_mtd = query_init(mtd_str, data_pack)
             for exp in exps:
                 plans = func_m[exp](ori_plan, q_meta[exp], dsname)
                 print(mtd_str, exp)
@@ -164,8 +206,10 @@ def parse_arg():
     exp_g.add_argument('-g', '--grid', action='store_true', default=False,
                        help="run grid search experiment")
     parser.add_argument('-m', '--search-method', type=str, default='b',
-                        help="use the first letter to name a type of framework or 's' for sliding, 'i' for index,"
-                             "or 'b' for both framework")
+                        help="use the first letter to name a type of framework: "
+                             "'s' for sliding, 'i' for index, 'b' for both, "
+                             "'C' for C++ (uppercase), 'CI' for C++ index only, "
+                             "'CS' for C++ sliding only")
     parser.add_argument('-o', '--output', type=str, default='stdout',
                         help="output file name, default is stdout")
     parser.add_argument('-c', '--config', type=str, default='',
