@@ -1,16 +1,15 @@
 import heapq
-from collections.abc import Mapping, Iterable
+from collections.abc import Iterable, Mapping
 from functools import partial
 from itertools import chain, groupby
 from operator import attrgetter
 
-
-from search.rest import yield_co_move, heap_group_pop, vanilla_merge
+from search.rest import heap_group_pop, yield_co_move
 
 
 class MaxDurFirstEnumerator:
     def __init__(self, trajs: Iterable, interval, verifier):
-        self.ts_grouped_traj = groupby(trajs, attrgetter('begin'))
+        self.ts_grouped_traj = groupby(trajs, attrgetter("begin"))
         self.interval = interval
         self.playground = {}
         self.verify = partial(verifier, self.playground)
@@ -80,11 +79,13 @@ class MaxDurationOnePass(MaxDurFirstEnumerator):
                 yield from self._yield_until(t, pre_insert)
             next_end = self._update(pre_insert)
 
-        finish += 1   # in a segment, end point is exclusive
+        finish += 1  # in a segment, end point is exclusive
         if next_end < finish:
-            yield from self._yield_until(finish-1, {})
+            yield from self._yield_until(finish - 1, {})
         if self.etq:
-            yield from self.verify(finish, [self.playground[info[1]] for info in self.etq])
+            yield from self.verify(
+                finish, [self.playground[info[1]] for info in self.etq]
+            )
 
 
 class MaxDurMultiPass(MaxDurFirstEnumerator):
@@ -96,7 +97,7 @@ class MaxDurMultiPass(MaxDurFirstEnumerator):
             tid = tra.id
             assert tid not in self.playground
             self.playground[tid] = tra
-            self.etq_push((tra.end+1, tid))
+            self.etq_push((tra.end + 1, tid))
         return self.etq[0][0]
 
     def __iter__(self):
@@ -104,7 +105,7 @@ class MaxDurMultiPass(MaxDurFirstEnumerator):
         self._init_state()
         if self.playground:
             for tid, traj in self.playground.items():
-                self.etq_push((traj.end+1, tid))
+                self.etq_push((traj.end + 1, tid))
             next_end = self.etq[0][0]
         else:
             return
@@ -123,15 +124,17 @@ class MaxDurMultiPass(MaxDurFirstEnumerator):
                 yield from self.verify(et, [self.playground[tid] for tid in end_g])
         if self.etq:
             finish += 1  # in a segment, end point is exclusive
-            yield from self.verify(finish, [self.playground[info[1]] for info in self.etq])
+            yield from self.verify(
+                finish, [self.playground[info[1]] for info in self.etq]
+            )
 
 
-def max_dur_enumerate(trajs, labels: Mapping, dur, interval, *, mtd='one'):
+def max_dur_enumerate(trajs, labels: Mapping, dur, interval, *, mtd="one"):
     verifier = partial(yield_co_move, dur, labels)
     match mtd:
-        case 'one':
+        case "one":
             return MaxDurationOnePass(trajs, interval, verifier)
-        case 'multi':
+        case "multi":
             return MaxDurMultiPass(trajs, interval, verifier)
         case _:
-            raise ValueError(f'mtd {mtd} not supported')
+            raise ValueError(f"mtd {mtd} not supported")
