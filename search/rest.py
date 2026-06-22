@@ -183,31 +183,60 @@ def heap_group_pop(heap):
         yield heapq.heappop(heap)[1]
 
 
-def absorb(trajectories: Mapping[int, Trajectory], duration):
+def absorb(
+    trajectories: Mapping[int, Trajectory],
+    duration: int,
+    *,
+    check_duration: bool = True,
+):
     """
-    merge segments from the same object into a single segment
-    :param trajectories: a map: id -> trajectory
-    :param duration: co-movement duration
-    :return: a generator with trajectories herein.
+    Merge segments from the same object.
+
+    Internal representation:
+        traj.seg = [begin1, end1, begin2, end2, ...]
+    where each interval is half-open: [begin, end).
+
+    Output representation:
+        TrajectoryIntervalSeg(..., begin, ..., end - 1)
+    where output end is inclusive.
+
+    If check_duration=False, this function only coalesces intervals and does
+    not require the result to satisfy duration. This is useful for stride/carry
+    logic across slice boundaries.
     """
+    if duration <= 0:
+        raise ValueError("duration must be positive")
+
+    def valid_len(beg, end):
+        return (not check_duration) or (end - beg >= duration)
+
     for tid, traj in trajectories.items():
         seq = traj.seg
+
+        if not seq:
+            continue
+
+        if len(seq) % 2 != 0:
+            raise ValueError(f"trajectory {tid} has odd endpoint count")
+
         if len(seq) > 2:
             seq.sort()
             beg = seq[0]
+
             for a, b in batched(islice(seq, 1, len(seq) - 1), n=2):
                 if a != b:
-                    s_len = a - beg
-                    if s_len >= duration:
+                    if a > beg and valid_len(beg, a):
                         yield TrajectoryIntervalSeg(tid, beg, traj.label, a - 1)
                     beg = b
-            s_len = seq[-1] - beg
-            if s_len >= duration:
-                yield TrajectoryIntervalSeg(tid, beg, traj.label, seq[-1] - 1)
+
+            end = seq[-1]
+            if end > beg and valid_len(beg, end):
+                yield TrajectoryIntervalSeg(tid, beg, traj.label, end - 1)
+
         else:
-            s_len = seq[-1] - seq[0]
-            if s_len >= duration:
-                yield TrajectoryIntervalSeg(tid, seq[0], traj.label, seq[-1] - 1)
+            beg, end = seq
+            if end > beg and valid_len(beg, end):
+                yield TrajectoryIntervalSeg(tid, beg, traj.label, end - 1)
 
 
 def vanilla_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
@@ -232,44 +261,160 @@ def vanilla_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
     return trajs
 
 
-def stride_merge(rest_idx, trajs, region, labels: Mapping, dur, interval, expend= 2, minima=3000):
+def add_interval(store, tid, label, beg, end):
+    """
+    Add a half-open interval [beg, end) into a trajectory store.
+    """
+    if end <= beg:
+        return
+
+    old = store.get(tid)
+    if old is None:
+        store[tid] = Trajectory(tid, label, [beg, end])
+    else:
+        old.seg.append(beg)
+        old.seg.append(end)
+
+def add_seg(visited, seg):
+    add_interval(visited, seg.id, seg.label, seg.begin, seg.end)
+
+def flush_window(visited, *, final: bool):
+    """
+    Flush current visited trajectories. visited is updated in place.
+
+    Non-final flush:
+    - emit closed intervals only if len >= dur;
+    - discard closed intervals shorter than dur;
+    - carry boundary-touching/crossing intervals.
+
+    Final flush:
+    - emit every interval satisfying len >= dur;
+    - discard the rest.
+    """
+    merged = list(absorb(visited, dur, check_duration=False))
+    merged.sort(key=attrgetter("begin"))
+
+    emitted = []
+    carried: dict[int, Trajectory] = {}
+
+    carry_cut = window_end - dur
+
+    for seg in merged:
+        beg = seg.begin
+        end = seg.end + 1  # convert inclusive output end back to half-open
+
+        if final:
+            if end - beg >= dur:
+                emitted.append(seg)
+            continue
+
+        if end >= window_end:
+            # This interval may merge with the next slice.
+            #
+            # Since partial merging is allowed, we only carry the suffix
+            # that is close enough to the boundary.
+            carry_beg = max(beg, carry_cut)
+
+            # Emit the safe prefix if it is long enough.
+            if carry_beg > beg and carry_beg - beg >= dur:
+                emitted.append(
+                    TrajectoryIntervalSeg(
+                        seg.id,
+                        beg,
+                        seg.label,
+                        carry_beg - 1,
+                    )
+                )
+
+            # Carry the suffix even if it is shorter than dur.
+            # It may become valid after merging with the next slice.
+            add_interval(carried, seg.id, seg.label, carry_beg, end)
+
+        else:
+            # This interval ends before the window boundary.
+            # Since future segments begin at or after window_end, it cannot
+            # merge with future slices anymore.
+            if end - beg >= dur:
+                emitted.append(seg)
+            # else: discard impossible short interval
+
+    visited.clear()
+    visited.update(carried)
+    emitted.sort(key=attrgetter("begin"))
+    return emitted
+
+
+
+def stride_merge(
+    rest_idx,
+    trajs,
+    region,
+    labels: Mapping,
+    dur,
+    interval,
+    expend=2,
+    minima=3000,
+):
+    """
+    Windowed trajectory merge with cross-slice carry.
+
+    Design:
+    - absorb(..., check_duration=False) only coalesces intervals.
+    - stride_merge decides whether an interval is safe to emit, should be
+      carried to the next window, or should be discarded.
+    - Boundary-crossing intervals are partially carried using the last `dur`
+      time units of the window.
+    """
     if not labels:
         return
+
+    if dur <= 0:
+        raise ValueError("dur must be positive")
     if expend <= 1:
         raise ValueError("expend must be greater than 1")
-    candidates, probation = zip(
-        *(
-            rest_idx[label].query(trajs, region.bbox, dur, interval, 1)
-            for label in labels
-        )
-    )
-    verified = heapq.merge(
-        *probation,
-        *(candidate_verified_queue(can, region, dur) for can in candidates),
-        key=attrgetter("begin"),
-    )
+    if minima <= 0:
+        raise ValueError("minima must be positive")
+
     stride = max(dur * expend, minima)
-    end = interval[0] + stride
-    active = {}
+
+    if stride < 2 * dur:
+        raise ValueError("window size must be at least 2 * dur")
+
+    queried = [
+        rest_idx[label].query(trajs, region.bbox, dur, interval, 1)
+        for label in labels
+    ]
+
+    candidates, probation = zip(*queried)
+
+    streams = [iter(p) for p in probation]
+    streams.extend(
+        candidate_verified_queue(candidate, region, dur)
+        for candidate in candidates
+    )
+
+    # Required for stride-window correctness.
+    verified = merge(*streams, key=attrgetter("begin"))
+
+    window_start = interval[0]
+    window_end = window_start + stride
+
+    visited: dict[int, Trajectory] = {}
     for seg in verified:
-        if (beg := seg.begin) < end:
-            if (old := active.get(seg.id, None)) is None:
-                active[seg.id] = Trajectory(seg.id, seg.label, [beg, seg.end])
-            else:
-                old.seg.extend([beg, seg.end])
-        else:
-            trajs = list(absorb(active, dur))
-            trajs.sort(key=attrgetter("begin"))
-            yield from trajs
-            yield None, None
-            active = {}
-            end = beg + stride
-            active[seg.id] = Trajectory(seg.id, seg.label, [beg, seg.end])
-    
-    if active:
-        trajs = list(absorb(active, dur))
-        trajs.sort(key=attrgetter("begin"))
-        yield from trajs
+        beg = seg.begin
+
+        if beg >= window_end:
+            emitted = flush_window(visited, final=False)
+            yield from emitted
+
+            # Adaptive window: skip empty time ranges.
+            window_start = beg
+            window_end = window_start + stride
+
+        add_seg(visited, seg)
+
+    if visited:
+        yield from flush_window(visited, final=True)
 
 
 def one_pass_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
