@@ -1,7 +1,7 @@
 from search.index_based.base import base_enumerate
 from search.index_based.max_dur import max_dur_enumerate
 from search.index_based.max_obj import MaxObjNumEnumerator
-from search.rest import vanilla_merge, one_pass_merge
+from search.rest import vanilla_merge, one_pass_merge, stride_merge
 
 
 def index_based_framework(data_pack, region, labels, duration, interval, *, method=('max', 'dur', 'multi')):
@@ -20,7 +20,11 @@ def index_based_framework(data_pack, region, labels, duration, interval, *, meth
         case 'multi':
             trajs = vanilla_merge(rest_idx, trajs, region, labels, dur, interval)
         case 'one':
-            trajs = one_pass_merge(rest_idx, trajs, region, labels, dur, interval)
+            match enu_mtd:
+                case ['max', 'obj']:
+                    trajs = one_pass_merge(rest_idx, trajs, region, labels, dur, interval)
+                case _:
+                    trajs = stride_merge(rest_idx, trajs, region, labels, dur, interval)
         case _:
             raise ValueError(f'Unknown merge method {merge_mtd} in {method}')
 
