@@ -1,19 +1,24 @@
 import heapq
 from bisect import bisect_left
 from collections import Counter, deque
-from collections.abc import Iterable, MutableMapping, Callable
-from collections.abc import Mapping, Sequence
-from itertools import takewhile, islice, batched, chain
+from collections.abc import Callable, Iterable, Mapping, MutableMapping, Sequence
+from itertools import batched, chain, islice, takewhile
 from operator import attrgetter
+
+from utilities import TrajectoryIntervalSeg
 
 from search.co_moving import CoMovementPattern
 from search.verifier import candidate_verified_queue
 from utilities.trajectory import BasicTrajectorySeg, Trajectory
-from traj_seg import TrajectoryIntervalSeg
 
 
-def yield_co_move(duration: int, labels: Mapping[int, int], active_space: MutableMapping[int, BasicTrajectorySeg],
-                  timestamp: int, traj_required: Sequence) -> Iterable[tuple[list[int], int, int]]:
+def yield_co_move(
+    duration: int,
+    labels: Mapping[int, int],
+    active_space: MutableMapping[int, BasicTrajectorySeg],
+    timestamp: int,
+    traj_required: Sequence,
+) -> Iterable[tuple[list[int], int, int]]:
     """
     a co-movement checker respecting objects' label and count and their co-moving duration .
     Note that this function may modify `active_space`.
@@ -25,14 +30,19 @@ def yield_co_move(duration: int, labels: Mapping[int, int], active_space: Mutabl
     :return: iterator of tuple(ids, start, end)
     """
     max_begin = timestamp - duration + 1
-    begin_min = min(map(attrgetter('begin'), traj_required))
+    begin_min = min(map(attrgetter("begin"), traj_required))
 
     if begin_min >= max_begin:
         for traj in traj_required:
             del active_space[traj.id]
         return
 
-    traj_cand = [traj for traj in takewhile(lambda traj: traj.begin < max_begin, active_space.values())]
+    traj_cand = [
+        traj
+        for traj in takewhile(
+            lambda traj: traj.begin < max_begin, active_space.values()
+        )
+    ]
     for traj in traj_required:
         del active_space[traj.id]
     ids = [traj.id for traj in traj_cand]
@@ -98,10 +108,11 @@ def sliding_window(df, win_len):
         yield window
 
 
-def state_sliding(pat_series: Iterable[CoMovementPattern],
-                  obj_verifier,
-                  state_maintainer: Callable[[int, Sequence, int, int, bool], [Iterable, Iterable]]) \
-        -> Iterable[CoMovementPattern]:
+def state_sliding(
+    pat_series: Iterable[CoMovementPattern],
+    obj_verifier,
+    state_maintainer: Callable[[int, Sequence, int, int, bool], [Iterable, Iterable]],
+) -> Iterable[CoMovementPattern]:
     # $prev stores seen patterns. Every pattern is a set of objs that co-moves a certain period
     # Note that in terms of object set, prev[0] ⊃ prev[1] ⊃ prev[2] ⊃ ...
     pat_iter = iter(pat_series)
@@ -110,7 +121,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern],
         return
     prev = [cur]
     for cur in pat_iter:
-        absort = False
+        absorb = False
         cur_end = cur.end
         if cur.start > prev[0].end + 1:  # not consecutive in time interval
             count = len(prev)
@@ -125,7 +136,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern],
                         pat.end = cur_end
                     else:
                         new.append(cur)
-                    absort = True
+                    absorb = True
                     break
 
                 elif len(inter) == len(cur):  # cur is a proper subset of pat
@@ -133,7 +144,9 @@ def state_sliding(pat_series: Iterable[CoMovementPattern],
                     count += 1
 
                 else:  # intersection is a new objet set
-                    new_pattern = CoMovementPattern({obj: cur.labels[obj] for obj in inter})
+                    new_pattern = CoMovementPattern(
+                        {obj: cur.labels[obj] for obj in inter}
+                    )
                     new.append(cur)
                     if obj_verifier(new_pattern.label_count()):  # a new pattern
                         new_pattern.interval = [pat.start, cur_end]
@@ -145,7 +158,7 @@ def state_sliding(pat_series: Iterable[CoMovementPattern],
                 new.append(cur)
 
         prev_end = prev[0].end
-        fruits, prev_iter = state_maintainer(prev_end, prev, len(new), count, absort)
+        fruits, prev_iter = state_maintainer(prev_end, prev, len(new), count, absorb)
         for pat in fruits:
             pat.end = prev_end
             yield pat.to_plain()
@@ -198,9 +211,15 @@ def absorb(trajectories: Mapping[int, Trajectory], duration):
 
 
 def vanilla_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
-    candidates, probation = zip(*(rest_idx[label].query(trajs, region.bbox, dur, interval, 0)
-                                  for label in labels))
-    verified = chain(*probation, *(candidate_verified_queue(can, region, dur) for can in candidates))
+    candidates, probation = zip(
+        *(
+            rest_idx[label].query(trajs, region.bbox, dur, interval, 0)
+            for label in labels
+        )
+    )
+    verified = chain(
+        *probation, *(candidate_verified_queue(can, region, dur) for can in candidates)
+    )
     visited = {}
     for seg in verified:
         if (old := visited.get(seg.id, None)) is None:
@@ -209,36 +228,62 @@ def vanilla_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
             old.seg.extend([seg.begin, seg.end])
 
     trajs = list(absorb(visited, dur))
-    trajs.sort(key=attrgetter('begin'))
+    trajs.sort(key=attrgetter("begin"))
     return trajs
 
 
-def stride_merge(rest_idx, trajs, region, labels: Mapping, dur, interval, minima=3000):
-    candidates, probation = zip(*(rest_idx[label].query(trajs, region.bbox, dur, interval, 1)
-                                  for label in labels))
-    verified = chain(*probation, *(candidate_verified_queue(can, region, dur) for can in candidates))
-    stride = max(dur * 2, minima)
+def stride_merge(rest_idx, trajs, region, labels: Mapping, dur, interval, expend= 2, minima=3000):
+    if not labels:
+        return
+    if expend <= 1:
+        raise ValueError("expend must be greater than 1")
+    candidates, probation = zip(
+        *(
+            rest_idx[label].query(trajs, region.bbox, dur, interval, 1)
+            for label in labels
+        )
+    )
+    verified = heapq.merge(
+        *probation,
+        *(candidate_verified_queue(can, region, dur) for can in candidates),
+        key=attrgetter("begin"),
+    )
+    stride = max(dur * expend, minima)
     end = interval[0] + stride
-    visited = {}
+    active = {}
     for seg in verified:
         if (beg := seg.begin) < end:
-            if (old := visited.get(seg.id, None)) is None:
-                visited[seg.id] = Trajectory(seg.id, seg.label, [beg, seg.end])
+            if (old := active.get(seg.id, None)) is None:
+                active[seg.id] = Trajectory(seg.id, seg.label, [beg, seg.end])
             else:
                 old.seg.extend([beg, seg.end])
         else:
-            trajs = list(absorb(visited, dur))
-            trajs.sort(key=attrgetter('begin'))
+            trajs = list(absorb(active, dur))
+            trajs.sort(key=attrgetter("begin"))
             yield from trajs
             yield None, None
-            visited = {}
+            active = {}
             end = beg + stride
+            active[seg.id] = Trajectory(seg.id, seg.label, [beg, seg.end])
+    
+    if active:
+        trajs = list(absorb(active, dur))
+        trajs.sort(key=attrgetter("begin"))
+        yield from trajs
 
 
 def one_pass_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
-    candidates, probation = zip(*(rest_idx[label].query(trajs, region.bbox, dur, interval, 1)
-                                  for label in labels))
-    traj_it = heapq.merge(*probation,
-                          *(candidate_verified_queue(can, region, dur) for can in candidates),
-                          key=attrgetter('begin'))
+    if not labels:
+        return
+    candidates, probation = zip(
+        *(
+            rest_idx[label].query(trajs, region.bbox, dur, interval, 1)
+            for label in labels
+        )
+    )
+    traj_it = heapq.merge(
+        *probation,
+        *(candidate_verified_queue(can, region, dur) for can in candidates),
+        key=attrgetter("begin"),
+    )
     return traj_it
