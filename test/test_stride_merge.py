@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
-from search.rest import stride_merge as m
+
+import search.rest as m
 
 
 @dataclass
