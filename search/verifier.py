@@ -4,11 +4,14 @@ from operator import attrgetter
 from typing import Iterable
 
 import numpy as np
+
 from utilities.box2D import Box2D
-from traj_seg import TrajectoryIntervalSeg
+from utilities.trajectory import TrajectoryIntervalSeg
 
 
-def candidate_verified_queue(candidates: Iterable, region: Box2D, duration: int) -> Iterable[TrajectoryIntervalSeg]:
+def candidate_verified_queue(
+    candidates: Iterable, region: Box2D, duration: int
+) -> Iterable[TrajectoryIntervalSeg]:
     """
     verify trajectories and find the segments within region
     :param region: a box object with `enclose` function implemented
@@ -20,12 +23,12 @@ def candidate_verified_queue(candidates: Iterable, region: Box2D, duration: int)
     for cand_seg in candidates:
         mask = region.enclose(cand_seg.points)
 
-        pos = bisect_right(verified, cand_seg.begin, key=attrgetter('begin'))
+        pos = bisect_right(verified, cand_seg.begin, key=attrgetter("begin"))
         if pos > 0:
             yield from islice(verified, pos)
             verified = verified[pos:]
         verified.extend(verify_seg(cand_seg, mask, duration))
-        verified.sort(key=attrgetter('begin'))
+        verified.sort(key=attrgetter("begin"))
     yield from verified
 
 
@@ -43,7 +46,7 @@ def verify_seg(segment, mask, duration: int):
         if mask.all():
             yield TrajectoryIntervalSeg(sid, begin, label, begin + len(mask))
             return
-        tmp = np.empty(in_pos.shape[0]+1, dtype=np.int32)
+        tmp = np.empty(in_pos.shape[0] + 1, dtype=np.int32)
         tmp[0] = -2
         tmp[1:] = in_pos
         start_pos = np.flatnonzero(np.diff(tmp) > 1)
@@ -86,8 +89,8 @@ def len_filter(num_m, length):
 
 
 def df_filter(df, reg_verifier, target_label):
-    df = df[df['cls'].isin(target_label)]  # class verification
-    df = df[reg_verifier(df[['x', 'y']])]  # region verification
+    df = df[df["cls"].isin(target_label)]  # class verification
+    df = df[reg_verifier(df[["x", "y"]])]  # region verification
     return df
 
 

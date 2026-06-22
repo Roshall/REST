@@ -7,8 +7,7 @@ from operator import attrgetter
 
 from search.co_moving import CoMovementPattern
 from search.verifier import candidate_verified_queue
-from utilities import TrajectoryIntervalSeg
-from utilities.trajectory import BasicTrajectorySeg, Trajectory
+from utilities.trajectory import BasicTrajectorySeg, Trajectory, TrajectoryIntervalSeg
 
 
 def yield_co_move(
