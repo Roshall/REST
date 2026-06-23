@@ -49,9 +49,10 @@ def concatenate_stride(bor_m, space):
 def border_stride(bor, space):
     bor = np.asarray(bor).reshape(-1, 2)
     stride = (bor[:, 1] - bor[:, 0] - 1) // np.asarray(space) + 1
-    bor_st = list(bor[0])
+    stride = stride.tolist()
+    bor_st = bor[0].tolist()
     bor_st.append(stride[0])
-    bor_st.extend(bor[1])
+    bor_st.extend(bor[1].tolist())
     bor_st.append(stride[1])
     return bor_st
 
