@@ -1,17 +1,17 @@
 {
   "florida": {
-    "extension": "pkl",
+    "extension": "parquet",
     "top9_cat": [2,0,10,74,7,1,3,58,25]
   },
   "ireland": {
-    "extension": "pkl",
+    "extension": "parquet",
     "top9_cat": [0, 26, 24, 1, 56, 28, 58, 74, 67]
   },
   "jacksontown": {
 
   },
   "osaka": {
-    "extension": "pkl",
+    "extension": "parquet",
     "top9_cat": [2,0,10,74,7,1,3,58,25]
   },
   "shinjuku": {
