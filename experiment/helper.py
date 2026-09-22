@@ -39,7 +39,7 @@ def gather_all(opt, data_m):
 #               /         \
 #   cxx_sliding(S)      cxx_index(I)
 #   /      \            /    |    \
-# V(naive) T(state)    D    A    J(max_obj)
+# V(naive) T(state)    D    A    J(max_obj, v2 default) K(max_obj_old)
 #                     /    \
 #                   O(one) U(multi)
 _mth_tree = {
@@ -49,11 +49,12 @@ _mth_tree = {
     # C++ framework (uppercase keys to avoid multi-char key collisions)
     'C': ('', ['I', 'S']),
     'S': ('cxx_sliding', ['T', 'V']),
-    'I': ('cxx_index', ['D', 'J', 'A']),
+    'I': ('cxx_index', ['D', 'J', 'A', 'K']),
     'V': ("cxx_naive", None, ['S']),
     'T': ("cxx_state", None, ['S']),
     'J': ("cxx_max_obj", None, ['I']),
     'A': ("cxx_base", None, ['I']),
+    'K': ("cxx_max_obj_old", None, ['I']),
     'D': ("cxx_max_dur", ['U', 'O']),
     'O': ("cxx_one", None, ['I', 'D']),
     'U': ("cxx_multi", None, ['I', 'D']),
