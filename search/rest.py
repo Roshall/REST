@@ -199,8 +199,10 @@ def absorb(
     where each interval is half-open: [begin, end).
 
     Output representation:
-        TrajectoryIntervalSeg(..., begin, ..., end - 1)
-    where output end is inclusive.
+        TrajectoryIntervalSeg(..., begin, ..., end)
+    where output end is half-open, matching the input convention. The
+    canonical internal segment representation is half-open [begin, end)
+    everywhere between the merge layer and the enumerators.
 
     If check_duration=False, this function only coalesces intervals and does
     not require the result to satisfy duration. This is useful for stride/carry
@@ -225,17 +227,17 @@ def absorb(
             for a, b in batched(islice(seq, 1, len(seq) - 1), n=2):
                 if a != b:
                     if a > beg and valid_len(beg, a, duration, check_duration):
-                        yield TrajectoryIntervalSeg(tid, beg, traj.label, a - 1)
+                        yield TrajectoryIntervalSeg(tid, beg, traj.label, a)
                     beg = b
 
             end = seq[-1]
             if end > beg and valid_len(beg, end, duration, check_duration):
-                yield TrajectoryIntervalSeg(tid, beg, traj.label, end - 1)
+                yield TrajectoryIntervalSeg(tid, beg, traj.label, end)
 
         else:
             beg, end = seq
             if end > beg and valid_len(beg, end, duration, check_duration):
-                yield TrajectoryIntervalSeg(tid, beg, traj.label, end - 1)
+                yield TrajectoryIntervalSeg(tid, beg, traj.label, end)
 
 
 def vanilla_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
@@ -278,79 +280,6 @@ def add_interval(store, tid, label, beg, end):
         old.seg.append(end)
 
 
-def flush_window(visited, window_end, dur, *, final: bool):
-    """
-    Flush current visited trajectories. visited is updated in place.
-
-    Non-final flush:
-    - emit closed intervals only if len >= dur;
-    - discard closed intervals shorter than dur;
-    - carry boundary-touching/crossing intervals.
-
-    Final flush:
-    - emit every interval satisfying len >= dur;
-    - discard the rest.
-
-    Interval Representation:
-    - Input: absorb() outputs inclusive intervals [beg, end-1]
-    - Conversion: seg.end + 1 converts inclusive end to half-open [beg, end)
-    - Output: emitted segments use inclusive representation for downstream compatibility
-    """
-    merged = list(absorb(visited, dur, check_duration=False))
-    merged.sort(key=attrgetter("begin"))
-
-    emitted = []
-    carried: dict[int, Trajectory] = {}
-
-    # Ensure carry_cut is positive to avoid incorrect interval splitting
-    assert window_end > dur
-    carry_cut = window_end - dur
-
-    for seg in merged:
-        beg = seg.begin
-        end = seg.end + 1  # convert inclusive output end back to half-open
-
-        if final:
-            if end - beg >= dur:
-                emitted.append(seg)
-            continue
-
-        if end >= window_end:
-            # This interval may merge with the next slice.
-            #
-            # Since partial merging is allowed, we only carry the suffix
-            # that is close enough to the boundary.
-            carry_beg = max(beg, carry_cut)
-
-            # Emit the safe prefix if it is long enough.
-            if carry_beg > beg and carry_beg - beg >= dur:
-                emitted.append(
-                    TrajectoryIntervalSeg(
-                        seg.id,
-                        beg,
-                        seg.label,
-                        carry_beg - 1,
-                    )
-                )
-
-            # Carry the suffix even if it is shorter than dur.
-            # It may become valid after merging with the next slice.
-            add_interval(carried, seg.id, seg.label, carry_beg, end)
-
-        else:
-            # This interval ends before the window boundary.
-            # Since future segments begin at or after window_end, it cannot
-            # merge with future slices anymore.
-            if end - beg >= dur:
-                emitted.append(seg)
-            # else: discard impossible short interval
-
-    visited.clear()
-    visited.update(carried)
-    emitted.sort(key=attrgetter("begin"))
-    return emitted
-
-
 def stride_merge(
     rest_idx,
     trajs,
@@ -362,24 +291,24 @@ def stride_merge(
     minima: int = 3000,
 ):
     """
-    Windowed trajectory merge with cross-slice carry.
+    Streaming trajectory merge, equivalent to ``vanilla_merge``.
 
-    Design:
-    - absorb(..., check_duration=False) only coalesces intervals.
-    - stride_merge decides whether an interval is safe to emit, should be
-      carried to the next window, or should be discarded.
-    - Boundary-crossing intervals are partially carried using the last `dur`
-      time units of the window.
+    Segments are consumed globally in ascending ``begin`` order (the sorted
+    RestIndex query path). A trajectory's collected intervals are coalesced by
+    ``absorb`` and released as soon as no later segment can touch them — once
+    the next segment's ``begin`` is strictly greater than the trajectory's last
+    end. ``expend``/``minima`` bound how long an *open* trajectory is retained;
+    they never change the emitted segment multiset.
 
-    Interval Representation Flow:
-    - Input: verified streams provide half-open intervals [beg, end)
-    - Storage: add_interval() stores half-open intervals in trajectory store
-    - Merge: absorb() outputs inclusive intervals [beg, end-1]
-    - Flush: flush_window() converts inclusive back to half-open for processing
-    - Output: final emitted segments use inclusive representation
+    A long-lived trajectory is released after segments that began later, so its
+    own (earlier) segments would arrive out of order; the released segments are
+    therefore buffered and sorted once. Callers receive a list, exactly like
+    ``vanilla_merge``.
+
+    Interval representation: half-open ``[begin, end)`` end to end.
     """
     if not labels:
-        return
+        return []
 
     if dur <= 0:
         raise ValueError("dur must be positive")
@@ -413,27 +342,38 @@ def stride_merge(
         candidate_verified_queue(candidate, region, dur) for candidate in candidates
     )
 
-    # Required for stride-window correctness.
     verified = heapq.merge(*streams, key=attrgetter("begin"))
 
-    window_start = interval[0]
-    window_end = window_start + stride
-
     visited: dict[int, Trajectory] = {}
+    # Min-heap of (max_end, tid) for open trajectories. Entries go stale when a
+    # trajectory gains a later interval; the stale entry is skipped and the
+    # refreshed one is popped later.
+    open_heap: list[tuple[int, int]] = []
+    released = []
+
+    def release(tid: int) -> None:
+        traj = visited.pop(tid)
+        released.extend(absorb({tid: traj}, dur))
+
     for seg in verified:
         beg = seg.begin
+        while open_heap and open_heap[0][0] < beg:
+            last_end, tid = heapq.heappop(open_heap)
+            traj = visited.get(tid)
+            if traj is None:
+                continue
+            if max(traj.seg[1::2]) != last_end:
+                continue  # stale entry; the trajectory grew
+            release(tid)
 
-        if beg >= window_end:
-            emitted = flush_window(visited, window_end, dur, final=False)
-            yield from emitted
-
-            # Adaptive window: skip empty time ranges.
-            window_start = beg
-            window_end = window_start + stride
         add_interval(visited, seg.id, seg.label, seg.begin, seg.end)
+        heapq.heappush(open_heap, (max(visited[seg.id].seg[1::2]), seg.id))
 
-    if visited:
-        yield from flush_window(visited, window_end, dur, final=True)
+    for tid in list(visited):
+        release(tid)
+
+    released.sort(key=attrgetter("begin"))
+    return released
 
 
 def one_pass_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
@@ -451,3 +391,21 @@ def one_pass_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
         key=attrgetter("begin"),
     )
     return traj_it
+
+
+def coalesce(segments, dur: int):
+    """Group a raw segment stream by object and absorb it.
+
+    ``one_pass_merge`` yields per-cell segments without coalescing, so a single
+    object can appear as several touching pieces. ``vanilla_merge`` and
+    ``stride_merge`` both absorb per object, so any consumer of
+    ``one_pass_merge`` must run this first to see the same segment multiset.
+
+    Returns a list sorted by ``begin``, using half-open ``[begin, end)`` ends.
+    """
+    visited: dict[int, Trajectory] = {}
+    for seg in segments:
+        add_interval(visited, seg.id, seg.label, seg.begin, seg.end)
+    out = list(absorb(visited, dur))
+    out.sort(key=attrgetter("begin"))
+    return out

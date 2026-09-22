@@ -88,7 +88,10 @@ class MaxObjNumEnumerator:
     def __init__(self, trajectories: Iterable, labels, dur, interval):
         self.ts_grouped_traj = groupby(trajectories, key=attrgetter("begin"))
         self.interval = interval
-        self.dur = dur - 1
+        # Segments are half-open [begin, end), so an object occupies `end - begin`
+        # time units. Keeping `dur` (rather than dur-1) makes the window test
+        # `end - begin >= dur` line up with the max_dur enumerators.
+        self.dur = dur
         self.end_q = []
         self.counter_back = {label: -count for label, count in labels.items()}
         self.label_counter = self.counter_back.copy()
@@ -98,6 +101,12 @@ class MaxObjNumEnumerator:
         self.label_verify = partial(label_verifier, label_counter=self.label_counter)
 
     def __iter__(self):
+        # The pool works on half-open ends internally; results carry an
+        # inclusive end, matching every other enumerator.
+        for ids, start, end in self._iterate():
+            yield ids, start, end - 1
+
+    def _iterate(self):
         start, terminal = self.interval
         final_s = terminal - self.dur
         last_s = self._init_state()
@@ -165,7 +174,7 @@ class MaxObjNumEnumerator:
 
         # ppool contains the pattern to be concatenated
         # finally, we check their duration and pop them out.
-        yield from ppool.pop_until(ppool.end - self.dur)
+        yield from ppool.iter_until(ppool.end - self.dur)
 
     def _remove(self):
         for tid in self.eq_group_pop():

@@ -4,7 +4,7 @@ from typing import Union
 from search.index_based.base import base_enumerate
 from search.index_based.max_dur import max_dur_enumerate
 from search.index_based.max_obj import MaxObjNumEnumerator
-from search.rest import one_pass_merge, stride_merge, vanilla_merge
+from search.rest import coalesce, one_pass_merge, stride_merge, vanilla_merge
 
 
 def index_based_framework(
@@ -69,8 +69,13 @@ def index_based_framework(
         case "one":
             match enu_mtd:
                 case ("max", "obj"):
-                    trajs = one_pass_merge(
-                        rest_idx, trajs, region, labels, dur, interval
+                    # one_pass_merge streams per-cell segments without
+                    # coalescing them per object, so the enumerator would see a
+                    # single object as several pieces. Absorb first so all merge
+                    # strategies hand the enumerator the same segment multiset.
+                    trajs = coalesce(
+                        one_pass_merge(rest_idx, trajs, region, labels, dur, interval),
+                        dur,
                     )
                 case _:
                     trajs = stride_merge(rest_idx, trajs, region, labels, dur, interval)

@@ -12,7 +12,9 @@ def sliding_framework(df, region, labels, duration, interval, *, method='naive')
     obj_verifier = partial(obj_verify, labels)
     dfilter = partial(df_filter, reg_verifier=region.enclose, target_label=labels.keys())
     match method:
-        case 'naive':
+        case 'naive' | 'base':
+            # 'base' is the C++ spelling of the naive slider; accept both so the
+            # two implementations expose the same method names.
             slider = naive_slider
         case 'state':
             slider = state_slider

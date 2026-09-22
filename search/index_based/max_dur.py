@@ -69,20 +69,24 @@ class MaxDurationOnePass(MaxDurFirstEnumerator):
                 self.etq_push((traj.end, tid))
             next_end = self.etq[0][0]
         else:
-            return
+            # No object is present at the interval start. Objects appearing
+            # later still co-move, so keep going instead of returning empty.
+            next_end = None
 
         for t, group in self.ts_grouped_traj:
             if t > finish:
                 break
             pre_insert = {traj.id: traj for traj in group}
-            if next_end <= t:
+            if next_end is not None and next_end <= t:
                 yield from self._yield_until(t, pre_insert)
             next_end = self._update(pre_insert)
 
-        finish += 1  # in a segment, end point is exclusive
-        if next_end < finish:
-            yield from self._yield_until(finish - 1, {})
+        # Half-open segments: an interval ending exactly at `finish` still
+        # produces a pattern whose inclusive end is `finish - 1`.
         if self.etq:
+            yield from self._yield_until(finish, {})
+        if self.etq:
+            # Intervals that run past the query interval are capped at `finish`.
             yield from self.verify(
                 finish, [self.playground[info[1]] for info in self.etq]
             )
@@ -97,7 +101,9 @@ class MaxDurMultiPass(MaxDurFirstEnumerator):
             tid = tra.id
             assert tid not in self.playground
             self.playground[tid] = tra
-            self.etq_push((tra.end + 1, tid))
+            # Segments are half-open [begin, end): the end event is `end`
+            # itself, and yield_co_move turns it back into an inclusive end.
+            self.etq_push((tra.end, tid))
         return self.etq[0][0]
 
     def __iter__(self):
@@ -105,10 +111,12 @@ class MaxDurMultiPass(MaxDurFirstEnumerator):
         self._init_state()
         if self.playground:
             for tid, traj in self.playground.items():
-                self.etq_push((traj.end + 1, tid))
+                self.etq_push((traj.end, tid))
             next_end = self.etq[0][0]
         else:
-            return
+            # No object is present at the interval start. Objects appearing
+            # later still co-move, so keep going instead of returning empty.
+            next_end = None
 
         for t, group in self.ts_grouped_traj:
             if t > finish:
@@ -118,12 +126,12 @@ class MaxDurMultiPass(MaxDurFirstEnumerator):
                 yield from self.verify(et, [self.playground[tid] for tid in end_g])
             next_end = self._update(group)
 
-        if next_end <= finish:
+        if next_end is not None and next_end <= finish:
             while self.etq and (et := self.etq[0][0]) <= finish:
                 end_g = self.group_pop()
                 yield from self.verify(et, [self.playground[tid] for tid in end_g])
         if self.etq:
-            finish += 1  # in a segment, end point is exclusive
+            # Intervals that run past the query interval are capped at `finish`.
             yield from self.verify(
                 finish, [self.playground[info[1]] for info in self.etq]
             )

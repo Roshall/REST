@@ -1,3 +1,11 @@
+"""
+NOTE: ``stride_merge`` is now a streaming merge that is *equivalent* to
+``vanilla_merge``. It no longer splits boundary-crossing intervals, so a
+trajectory is emitted as a single coalesced segment per continuous range.
+Segments use the canonical half-open ``[begin, end)`` representation, so
+``TrajectoryIntervalSeg.end`` is exclusive (it used to be inclusive).
+"""
+
 from dataclasses import dataclass
 from types import SimpleNamespace
 
@@ -194,7 +202,7 @@ def test_single_duration_valid_segment_is_emitted():
 
     assert_no_window_sentinel(out)
     assert as_tuples(out) == [
-        (1, 0, 9, 0),
+        (1, 0, 10, 0),
     ]
 
 
@@ -223,7 +231,7 @@ def test_touching_segments_inside_same_window_are_merged():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (1, 0, 11, 0),
+        (1, 0, 12, 0),
     ]
 
 
@@ -242,7 +250,7 @@ def test_gapped_segments_inside_same_window_are_not_merged():
     # [0, 5) is too short.
     # [6, 20) has length 14.
     assert as_tuples(out) == [
-        (1, 6, 19, 0),
+        (1, 6, 20, 0),
     ]
 
 
@@ -250,8 +258,8 @@ def test_short_boundary_touching_interval_is_carried_and_becomes_valid():
     """
     dur = 10, stride = 20, first window is [0, 20).
 
-    [15, 20) alone is too short, but it touches the boundary.
-    It must be carried and merged with [20, 25).
+    [15, 20) alone is too short, but it touches the boundary, so it must be
+    carried and merged with [20, 25) rather than emitted early.
     """
     rest_idx = {
         0: FakeLabelIndex(
@@ -265,7 +273,7 @@ def test_short_boundary_touching_interval_is_carried_and_becomes_valid():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (1, 15, 24, 0),
+        (1, 15, 25, 0),
     ]
 
 
@@ -276,7 +284,8 @@ def test_exact_boundary_end_must_be_carried_not_closed():
     Correct condition is `end >= window_end`.
 
     [10, 20) touches the boundary exactly, then [20, 25) continues it.
-    The correct result is [10, 25), not [10, 20) plus dropping [20, 25).
+    The correct result is one merged [10, 25), not [10, 20) plus dropping
+    [20, 25).
     """
     rest_idx = {
         0: FakeLabelIndex(
@@ -290,7 +299,7 @@ def test_exact_boundary_end_must_be_carried_not_closed():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (1, 10, 24, 0),
+        (1, 10, 25, 0),
     ]
 
 
@@ -301,7 +310,8 @@ def test_interval_starting_near_boundary_but_ending_before_boundary_is_not_carri
         keep if begin >= window_end - dur
 
     [11, 19) starts in the last dur region of [0, 20), but it does not touch
-    the boundary. It cannot merge with future segments starting at 20.
+    the boundary. It cannot merge with future segments starting at 20, so it is
+    simply discarded for being shorter than dur.
     """
     rest_idx = {
         0: FakeLabelIndex(
@@ -315,7 +325,7 @@ def test_interval_starting_near_boundary_but_ending_before_boundary_is_not_carri
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (1, 20, 29, 0),
+        (1, 20, 30, 0),
     ]
 
 
@@ -332,21 +342,17 @@ def test_closed_short_interval_before_boundary_is_discarded():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (2, 20, 29, 0),
+        (2, 20, 30, 0),
     ]
 
 
-def test_cross_boundary_interval_emits_safe_prefix_and_carries_suffix():
+def test_cross_boundary_interval_stays_one_segment():
     """
     dur = 10, stride = 20, first window is [0, 20).
 
-    [0, 20) reaches the boundary.
-    We emit the safe prefix [0, 10), carry [10, 20),
-    then merge the carried suffix with [20, 30).
-
-    Expected:
-        [0, 10)  -> inclusive [0, 9]
-        [10, 30) -> inclusive [10, 29]
+    [0, 20) crosses the window boundary and [20, 30) continues the same
+    trajectory. The merge must coalesce them into a single [0, 30) segment:
+    splitting would report two shorter patterns instead of one maximal one.
     """
     rest_idx = {
         0: FakeLabelIndex(
@@ -360,20 +366,17 @@ def test_cross_boundary_interval_emits_safe_prefix_and_carries_suffix():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (1, 0, 9, 0),
-        (1, 10, 29, 0),
+        (1, 0, 30, 0),
     ]
 
 
-def test_long_cross_boundary_interval_is_truncated_to_last_duration_for_carry():
+def test_long_cross_boundary_interval_is_not_truncated():
     """
-    This checks memory-bounding behavior.
+    This checks that the memory-bounding carry does not change results.
 
-    [0, 25) crosses the boundary at 20.
-    With dur=10, only [10, 25) should be carried.
-    Safe prefix [0, 10) is emitted.
-
-    Then [25, 35) merges with the carried suffix.
+    [0, 25) crosses the boundary at 20, then [25, 35) continues it. The whole
+    range must be reported as [0, 35); truncating the carried suffix to the
+    last `dur` time units would lose the true start.
     """
     rest_idx = {
         0: FakeLabelIndex(
@@ -387,8 +390,7 @@ def test_long_cross_boundary_interval_is_truncated_to_last_duration_for_carry():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (1, 0, 9, 0),
-        (1, 10, 34, 0),
+        (1, 0, 35, 0),
     ]
 
 
@@ -423,7 +425,7 @@ def test_candidate_verified_stream_is_used():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (1, 0, 9, 0),
+        (1, 0, 10, 0),
     ]
 
 
@@ -434,15 +436,9 @@ def test_probation_and_candidate_streams_are_globally_merged_by_begin():
     probation has [20, 30)
     candidates have [0, 20)
 
-    If chain is used, [20, 30) is seen first and the partial-window behavior
-    can incorrectly produce [0, 30).
-
-    With heapq.merge by begin:
-        [0, 20) is processed first,
-        window boundary at 20 splits it into:
-            [0, 10) emitted
-            [10, 20) carried
-        then [20, 30) merges with the carried suffix.
+    The two pieces touch at 20, so with heapq.merge by begin the streams are
+    seen in time order and coalesced into one [0, 30) segment. Chaining
+    probation first would leave them unmerged.
     """
     rest_idx = {
         0: FakeLabelIndex(
@@ -458,8 +454,7 @@ def test_probation_and_candidate_streams_are_globally_merged_by_begin():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (1, 0, 9, 0),
-        (1, 10, 29, 0),
+        (1, 0, 30, 0),
     ]
 
 
@@ -480,8 +475,8 @@ def test_multiple_labels_are_merged_into_one_global_time_order():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (2, 0, 9, 1),
-        (1, 20, 29, 0),
+        (2, 0, 10, 1),
+        (1, 20, 30, 0),
     ]
 
 
@@ -502,8 +497,8 @@ def test_large_empty_time_gap_skips_empty_windows():
     out = run_stride(rest_idx)
 
     assert as_tuples(out) == [
-        (1, 0, 9, 0),
-        (2, 100, 109, 0),
+        (1, 0, 10, 0),
+        (2, 100, 110, 0),
     ]
 
 
