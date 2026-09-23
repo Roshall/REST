@@ -165,8 +165,12 @@ def state_sliding(
         prev = new
 
     if prev:
-        fruits, _ = state_maintainer(0, prev, 0, len(prev), False)
+        # Terminal flush: use the real end of the head chain, not 0. A fake
+        # prev_end of 0 would disable the valid_ptr decay in state_maintain and
+        # drop the head chain when it only just reached `duration` at the last
+        # frame of the stream.
         prev_end = prev[0].end
+        fruits, _ = state_maintainer(prev_end, prev, 0, len(prev), False)
         for pat in fruits:
             pat.end = prev_end
             yield pat.to_plain()

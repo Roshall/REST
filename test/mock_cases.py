@@ -205,6 +205,71 @@ MOCKS: tuple[Mock, ...] = (
         (((1,), 0, 9), ((1, 2), 20, 29)),
         "gap in one trajectory; the second range holds a joint pattern",
     ),
+    # --- sliding state-machine regression guards -----------------------------
+    # These isolate the two sliding defects fixed in round 1:
+    #   * tail_exact_dur / tail_subdur_head / reproducer_82184_82191 exercise
+    #     the terminal-flush path, where a pattern that only reaches `duration`
+    #     at the stream's last frame is dropped unless the real prev_end is used.
+    #   * abrupt_* / join_revives_chain / incomparable_windows / leave_shrink
+    #     exercise the "new object set" branch, where the original `cur` must be
+    #     carried into new_pats (and C++ must not drop the chain start).
+    Mock(
+        "tail_exact_dur",
+        ((1, 0, 95, 100),),
+        _q({0: 1}, 5, (0, 100)),
+        (((1,), 95, 99),),
+        "single object reaches dur exactly at the stream's last frame",
+    ),
+    Mock(
+        "tail_subdur_head",
+        ((1, 0, 90, 100), (2, 0, 95, 100)),
+        _q({0: 1}, 5, (0, 100)),
+        (((1,), 90, 99), ((1, 2), 95, 99)),
+        "head chain {1,2} only completes at the last frame; wider {1} too",
+    ),
+    Mock(
+        "reproducer_82184_82191",
+        ((82184, 0, 586471, 586500), (82191, 0, 586471, 586501)),
+        _q({0: 1}, 30, (586000, 586501)),
+        (((82191,), 586471, 586500),),
+        "31-frame / 2-object minimal reproducer of the terminal-flush drop",
+    ),
+    Mock(
+        "abrupt_swap_short",
+        ((1, 0, 0, 10), (2, 0, 5, 15)),
+        _q({0: 1}, 5, (0, 20)),
+        (((1,), 0, 9), ((1, 2), 5, 9), ((2,), 5, 14)),
+        "abrupt swap at fid=5 creates a new object set (dur=5)",
+    ),
+    Mock(
+        "abrupt_swap_long",
+        ((1, 0, 0, 10), (2, 0, 5, 15)),
+        _q({0: 1}, 8, (0, 20)),
+        (((1,), 0, 9), ((2,), 5, 14)),
+        "same swap but dur=8 so the joint window is too short",
+    ),
+    Mock(
+        "join_revives_chain",
+        ((1, 0, 0, 30), (2, 0, 0, 30), (3, 0, 10, 20)),
+        _q({0: 1}, 5, (0, 40)),
+        (((1, 2), 0, 29), ((1, 2, 3), 10, 19)),
+        "object 3 joins then leaves, reviving the {1,2} chain",
+    ),
+    Mock(
+        "incomparable_windows",
+        ((1, 0, 0, 15), (2, 0, 5, 20), (3, 0, 10, 25)),
+        _q({0: 1}, 5, (0, 30)),
+        (((1,), 0, 14), ((1, 2), 5, 14), ((1, 2, 3), 10, 14),
+         ((2,), 5, 19), ((2, 3), 10, 19), ((3,), 10, 24)),
+        "three offset windows -> many incomparable (non-nested) sets",
+    ),
+    Mock(
+        "leave_shrink",
+        ((1, 0, 0, 20), (2, 0, 0, 20), (3, 0, 0, 10)),
+        _q({0: 1}, 5, (0, 30)),
+        (((1, 2), 0, 19), ((1, 2, 3), 0, 9)),
+        "object 3 leaves at fid=10, shrinking {1,2,3} to {1,2}",
+    ),
 )
 
 

@@ -60,7 +60,10 @@ def draw_traj_point_in_grid(data, reg_borders):
 
 def group_by_frame(df, interval):
     df = df.sort_values(by='fid')  # in case that groups are not sorted by fid
-    df = df.query(f'{interval[0]} <= fid <= {interval[1]}')
+    # Half-open interval [lo, hi): a record at fid == hi is excluded, matching
+    # the canonical co-movement contract (mock_cases.clip, the index path, and
+    # the C++ GroupByFrame).
+    df = df.query(f'{interval[0]} <= fid < {interval[1]}')
     return df.groupby('fid')
 
 

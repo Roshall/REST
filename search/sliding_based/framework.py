@@ -11,7 +11,10 @@ def sliding_framework(df, region, labels, duration, interval, *, method='naive',
     """
     Args:
         duration: A sequence of durations in seconds. The first element is used.
-        interval: A sequence of [start, end] seconds.
+        interval: A sequence of [start, end] seconds. The interval is treated as
+            half-open ``[start, end)``: a frame at ``end`` is excluded. This
+            matches the canonical co-movement contract shared with the index
+            path and the reference oracle.
         fps: Frames per second used to convert the query to frames; defaults to
              ``cfg.DATA.FPS``. Pass 1 for frame-valued input.
     """
