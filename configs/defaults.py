@@ -20,5 +20,9 @@ _C.DATA = CN()
 _C.DATA.PATH = '/media/lg/DataSet/Dataset/detection_results/'
 _C.DATA.SCALE = 1
 _C.DATA.STRIDE = 1
+# Frames per second. Query `duration` and `interval` are authored in seconds and
+# converted to frames (the unit used internally by the search and index layers)
+# through this value. See utilities/time_unit.py.
+_C.DATA.FPS = 30
 
 _C.BOX_NP = True

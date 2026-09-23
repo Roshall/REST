@@ -94,15 +94,16 @@ def which_mth(opt):
 def default_plan(default):
     return {'region': default['bbox_scale_idx'],  # wait for dataset name
             'pattern': dict(default['pattern']),
-            'duration': [default['duration_left'], 100000],
-            'interval': [0, default['interval_right_idx']]
+            'duration': [default['duration_left'], 100000],  # seconds
+            'interval': [0, default['interval_right_idx']]  # seconds
             }  # wait for
     # dataset name
 
 
 def refine_interval(plan, plan_meta):
+    # plan_meta values are minutes; queries are authored in seconds.
     idx = plan['interval'][1]
-    plan['interval'][1] = plan_meta['interval']['10h'][idx] * 30 * 60
+    plan['interval'][1] = plan_meta['interval']['10h'][idx] * 60
 
 
 def refine_region(plan, reg_meta):

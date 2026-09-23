@@ -17,7 +17,8 @@ def interval_exp(default_query: dict, interval_meta: Mapping,
         raise ValueError('lf must be either 3h or 5h')
     interval_end_ls = interval_meta[clip_long]
     for end in interval_end_ls:
-        query_cand['interval'][-1] = end * 30 * 60
+        # interval meta is in minutes; queries are authored in seconds.
+        query_cand['interval'][-1] = end * 60
         yield query_cand
 
 

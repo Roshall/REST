@@ -56,7 +56,7 @@ def run_sliding(segments, query, method):
         return ()
     return norm(sliding_framework(
         df, SLIDING_REGION, query.labels, (query.duration,),
-        tuple(query.interval), method=method,
+        tuple(query.interval), method=method, fps=1,
     ))
 
 
@@ -197,7 +197,7 @@ def test_framework_dispatch_matches(mock, method):
     else:
         got = norm(index_based_framework(
             pack, REGION, mock.query.labels, (mock.query.duration,),
-            list(mock.query.interval), method=method,
+            list(mock.query.interval), method=method, fps=1,
         ))
     name = {"dur": "max_dur", "obj": "max_obj"}[method[1]]
     expected = run_all_methods(mock.segments, mock.query)[f"{name}_{method[2]}"]

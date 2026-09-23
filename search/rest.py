@@ -264,10 +264,18 @@ def vanilla_merge(rest_idx, trajs, region, labels: Mapping, dur, interval):
 
 def add_interval(store, tid, label, beg, end):
     """
-    Add a half-open interval [beg, end) into a trajectory store.
+    Add a half-open interval [beg, end) into a trajectory store, coalescing on
+    insert.
 
-    Note: This function expects half-open intervals [beg, end), where end is exclusive.
-    The trajectory store maintains intervals in half-open representation for internal processing.
+    Callers feed segments in ascending ``begin`` order per id (the sorted
+    RestIndex stream), so each interval is at or after the last stored one.
+    When it touches/overlaps the last interval we extend that interval's end in
+    O(1); when it is disjoint we append a new interval. This keeps ``traj.seg``
+    proportional to the number of disjoint intervals rather than the number of
+    incoming pieces, so a long-lived trajectory holds O(1) state.
+
+    Out-of-order input (defensive) is appended raw; the release-time ``absorb``
+    still sorts and merges it.
     """
     if end <= beg:
         return
@@ -275,9 +283,19 @@ def add_interval(store, tid, label, beg, end):
     old = store.get(tid)
     if old is None:
         store[tid] = Trajectory(tid, label, [beg, end])
-    else:
-        old.seg.append(beg)
-        old.seg.append(end)
+        return
+
+    seg = old.seg
+    if beg >= seg[-2]:  # at or after the last interval
+        if beg <= seg[-1]:  # touches/overlaps the last interval -> extend
+            if end > seg[-1]:
+                seg[-1] = end
+        else:  # disjoint -> new interval
+            seg.append(beg)
+            seg.append(end)
+    else:  # out-of-order: keep raw, absorb() will sort it on release
+        seg.append(beg)
+        seg.append(end)
 
 
 def stride_merge(

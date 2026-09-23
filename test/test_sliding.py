@@ -38,16 +38,16 @@ class TestSliding:
 
     def test_sliding_base(self):
         test1, test2 = query4test()
-        res = [(frozenset(ids), s, e) for ids, s, e in sliding_framework(self.data, *test1, method='base')]
+        res = [(frozenset(ids), s, e) for ids, s, e in sliding_framework(self.data, *test1, method='base', fps=1)]
         assert res == [(frozenset([2, 3, 1]), 5, 10), (frozenset([3, 1]), 4, 10), (frozenset([1]), 1, 10)]
 
-        res = [(frozenset(ids), s, e) for ids, s, e in sliding_framework(self.data, *test2, method='base')]
+        res = [(frozenset(ids), s, e) for ids, s, e in sliding_framework(self.data, *test2, method='base', fps=1)]
         assert res == [(frozenset([5, 1, 3]), 9, 18), (frozenset([2, 4, 5, 3]), 11, 20), (frozenset([2, 4, 3]), 11, 22)]
 
     def test_sliding_state(self):
         test1, test2 = query4test()
-        res = [(frozenset(ids), s, e) for ids, s, e in sliding_framework(self.data, *test1, method='state')]
+        res = [(frozenset(ids), s, e) for ids, s, e in sliding_framework(self.data, *test1, method='state', fps=1)]
         assert res == [(frozenset([2, 3, 1]), 5, 10), (frozenset([3, 1]), 4, 10), (frozenset([1]), 1, 10)]
 
-        res = [(frozenset(ids), s, e) for ids, s, e in sliding_framework(self.data, *test2, method='state')]
+        res = [(frozenset(ids), s, e) for ids, s, e in sliding_framework(self.data, *test2, method='state', fps=1)]
         assert res == [(frozenset([5, 1, 3]), 9, 18), (frozenset([2, 4, 5, 3]), 11, 20), (frozenset([2, 4, 3]), 11, 22)]

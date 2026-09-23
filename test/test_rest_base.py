@@ -1,7 +1,7 @@
 from configs import cfg
 from search.index_based.base import BaseSliding, base_enumerate, base_maintainer
 from search.index_based.max_obj import MaxObjNumEnumerator
-from search.rest import state_sliding, absorb
+from search.rest import state_sliding, absorb, add_interval
 from search.verifier import obj_verify
 from test.index_test_helper import grid_spt_tempo_idx_fake_data, query4test
 from utilities.trajectory import Trajectory, TrajectoryIntervalSeg
@@ -17,6 +17,32 @@ def test_absorb():
     trajs = {i: Trajectory(i, 0, seg) for i, seg in enumerate(segs)}
     res = [[traj.begin, traj.end] for traj in absorb(trajs, 4)]
     assert res == ans
+
+
+def test_add_interval_coalesces_on_insert():
+    # Contiguous pieces fed in ascending begin order must collapse to a single
+    # stored interval, so a long-lived trajectory keeps O(1) state instead of
+    # accumulating one endpoint pair per incoming piece.
+    store = {}
+    for k in range(1000):
+        add_interval(store, 1, 0, k, k + 1)
+    assert store[1].seg == [0, 1000]
+
+    # Touching intervals extend; a gap starts a new disjoint interval.
+    store = {}
+    for beg, end in [(0, 10), (10, 20), (25, 30), (30, 40)]:
+        add_interval(store, 1, 0, beg, end)
+    assert store[1].seg == [0, 20, 25, 40]
+
+    # Incremental coalescing must agree with raw append + absorb.
+    inc, raw = {}, {}
+    pieces = [(0, 5), (5, 12), (20, 30), (30, 31), (40, 60)]
+    for beg, end in pieces:
+        add_interval(inc, 1, 0, beg, end)
+        raw.setdefault(1, Trajectory(1, 0, [])).seg += [beg, end]
+    a = [(s.id, s.begin, s.end) for s in absorb(inc, 4)]
+    b = [(s.id, s.begin, s.end) for s in absorb(raw, 4)]
+    assert a == b
 
 
 class TestBaseSliding(object):

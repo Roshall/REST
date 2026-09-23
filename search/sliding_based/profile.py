@@ -15,7 +15,7 @@ if __name__ == '__main__':
 
     count = 0
     start = now()
-    for i in sliding_framework(data, region, label, duration[0], interval):
+    for i in sliding_framework(data, region, label, duration, interval, fps=1):
         count += 1
     end = now()
     print('result count:', count, 'using', end - start, 's.')

@@ -5,6 +5,7 @@ from search.index_based.base import base_enumerate
 from search.index_based.max_dur import max_dur_enumerate
 from search.index_based.max_obj import MaxObjNumEnumerator
 from search.rest import coalesce, one_pass_merge, stride_merge, vanilla_merge
+from utilities.time_unit import interval_to_frames, seconds_to_frames
 
 
 def index_based_framework(
@@ -15,6 +16,7 @@ def index_based_framework(
     interval: Sequence[int],
     *,
     method: Union[str, tuple] = ("max", "dur", "multi"),
+    fps=None,
 ):
     """
     Framework for index-based trajectory pattern mining.
@@ -24,8 +26,8 @@ def index_based_framework(
                    and trajs is the trajectory data.
         region: The spatial region to query.
         labels: A mapping of label to required count.
-        duration: A sequence of duration values. The first element is used.
-        interval: A sequence of [start, end] time interval.
+        duration: A sequence of durations in seconds. The first element is used.
+        interval: A sequence of [start, end] seconds.
         method: The search method configuration. Can be:
                 - A tuple of 3 elements: (enum_method, sub_method, merge_method)
                   e.g., ('max', 'dur', 'multi') or ('max', 'obj', 'one')
@@ -33,6 +35,8 @@ def index_based_framework(
                   e.g., ('max', 'dur')
                 - A string: enum_method only, defaults to 'multi' merge and no sub-method
                   e.g., 'base'
+        fps: Frames per second used to convert the query to frames; defaults to
+             ``cfg.DATA.FPS``. Pass 1 for frame-valued input.
 
     Returns:
         A list of co-movement patterns found in the specified region and time interval.
@@ -42,7 +46,8 @@ def index_based_framework(
     if not duration:
         raise ValueError("duration must be a non-empty sequence")
 
-    dur = duration[0]
+    dur = seconds_to_frames(duration[0], fps, minimum=1)
+    interval = interval_to_frames(interval, fps)
 
     for c in labels:
         if c not in rest_idx:
@@ -84,7 +89,7 @@ def index_based_framework(
 
     match enu_mtd:
         case ("base",):
-            return base_enumerate(trajs, labels, duration, interval)
+            return base_enumerate(trajs, labels, (dur,), interval)
         case ("max", sub_mtd):
             match sub_mtd:
                 case "obj":
