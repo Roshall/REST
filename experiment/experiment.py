@@ -2,13 +2,11 @@ import copy
 from collections.abc import Mapping
 from itertools import groupby, islice
 
+import os
+
 from configs import cfg
-from ext_index.builder import load_seg, build_rest
 from profile import Profile
-from utilities.query import build_index, query_init
 from helper import *
-from scripts.border import load_ext_index_meta
-from utilities.dataset import load_yolo_for
 from search_cxx.cxx_search import CxxIndex, cxx_sliding_query as _cxx_sliding
 
 
@@ -148,28 +146,35 @@ def run_one_exp(search_mtd, plans, region_num, repeat):
 
 def run_all_exp(mtds_str, ds_path, ds_full_name, dsname, exps, ori_plan,
                 q_meta, region_num, repeat):
+    # Every search now runs on the C++ engine (search_cxx.cxx_search). The
+    # legacy Python index (traj_seg/index_w) was removed, so the 'index' and
+    # 'sliding' frameworks are routed to the same C++ implementation as the
+    # explicit 'cxx' framework.
+    meta_file = os.path.join(cfg.INDEX.META_PATH, f'{ds_full_name}.json')
+    cxx_idx = None  # built lazily, only when an index-based method is used
+
+    def get_cxx_idx():
+        nonlocal cxx_idx
+        if cxx_idx is None:
+            cxx_idx = CxxIndex(
+                ds_path, meta_file,
+                cfg.INDEX.REGION.GRID.SPACE[0],
+                cfg.INDEX.REGION.GRID.SPACE[1],
+                cfg.DATA.STRIDE, cfg.DATA.SCALE)
+        return cxx_idx
+
     for framework, group in groupby(mtds_str, key=lambda x: x.split('_')[0]):
-        match framework:
-            case 'index':
-                data_pack = build_index(ds_path, ds_full_name, cfg)
-            case 'sliding':
-                data_pack, _, _ = load_yolo_for(ds_path)
-            case 'cxx':
-                meta_file = os.path.join(cfg.INDEX.META_PATH,
-                                         f'{ds_full_name}.json')
-                cxx_idx = CxxIndex(
-                    ds_path, meta_file,
-                    cfg.INDEX.REGION.GRID.SPACE[0],
-                    cfg.INDEX.REGION.GRID.SPACE[1],
-                    cfg.DATA.STRIDE, cfg.DATA.SCALE)
-                data_pack = None  # not used for cxx
-            case _:
-                raise ValueError(f'impossible framework: {framework}!!!')
         for mtd_str in group:
-            if framework == 'cxx':
-                search_mtd = cxx_query_init(mtd_str, cxx_idx, ds_path, cfg)
-            else:
-                search_mtd = query_init(mtd_str, data_pack)
+            # 'index'/'sliding' are legacy framework names; the 'cxx' prefix is
+            # explicit. All resolve to the C++ backend. Prepending 'cxx_' turns
+            # e.g. 'index_max_dur_multi' / 'sliding_state' into the exact
+            # method strings cxx_query_init expects.
+            cxx_mtd = mtd_str if framework == 'cxx' else 'cxx_' + mtd_str
+            is_sliding = framework == 'sliding' or mtd_str.startswith('cxx_sliding')
+            search_mtd = cxx_query_init(
+                cxx_mtd,
+                None if is_sliding else get_cxx_idx(),
+                ds_path, cfg)
             for exp in exps:
                 plans = func_m[exp](ori_plan, q_meta[exp], dsname)
                 print(mtd_str, exp)
@@ -177,21 +182,9 @@ def run_all_exp(mtds_str, ds_path, ds_full_name, dsname, exps, ori_plan,
 
 
 def run_grid_exp(mtds_str, refined_plan, grids, region_num, repeat):
-    data_pack = build_index(ds_pth, ds_full, cfg)
-    bor_m = load_ext_index_meta(os.path.join(cfg.INDEX.META_PATH,
-                                             f'{ds_full}.json'))
-    for m_s in mtds_str:
-        search_mtd = query_init(m_s, data_pack)
-        # run the (1, 1) one
-        run_one_exp(search_mtd, [refined_plan], region_num, repeat)
-        # run the rest
-        for grid in mod_grid(grids):
-            # rebuild index
-            segs = load_seg(data_pack[1], ds_full, bor_m,
-                            cfg.INDEX.META_PATH, grid)
-            data_pack[0] = build_rest(data_pack[1], segs, bor_m)
-
-            run_one_exp(search_mtd, [refined_plan], region_num, repeat)
+    raise NotImplementedError(
+        "grid experiment relied on the removed legacy index builder "
+        "(traj_seg/index_w); use the 'cxx' framework instead")
 
 
 def parse_arg():
