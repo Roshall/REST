@@ -432,31 +432,34 @@ def flush_window(visited, window_end, dur, *, final: bool):
     boundary = cut_position(merged, window_end, dur)
     carry_cut = boundary - dur
 
-    # Pass 1: where does each trajectory get carried from? A trajectory that
-    # cannot be cut — its head would be 1..dur-1 frames, too short to emit and
-    # too short to carry — is kept whole.
-    plans = []
+    # Pass 1: decide where each trajectory is carried from, tracking the
+    # earliest carry as we go. A trajectory that cannot be cut — its head would
+    # be 1..dur-1 frames, too short to emit and too short to carry — is kept
+    # whole. ``None`` marks a trajectory that closed before the cut.
+    carry_from: list[int | None] = []
+    horizon = inf
     for seg in merged:
         if seg.end >= boundary:
             carry_beg = max(seg.begin, carry_cut)
             if 0 < carry_beg - seg.begin < dur:
                 carry_beg = seg.begin
-            plans.append((seg, True, carry_beg))
+            carry_from.append(carry_beg)
+            if carry_beg < horizon:
+                horizon = carry_beg
         else:
-            plans.append((seg, False, seg.begin))
+            carry_from.append(None)
 
     # Pass 2: nothing may be emitted that begins at or after the earliest carry,
     # or a trajectory kept whole would come out after it and break the sort.
     # Anything not safe yet is deferred by one flush — it is already closed, so
     # deferring costs latency, never correctness.
-    horizon = min((carry for _seg, crossing, carry in plans if crossing), default=inf)
     emitted = []
     carried: dict[int, Trajectory] = {}
 
-    for seg, crossing, carry_beg in plans:
+    for seg, carry_beg in zip(merged, carry_from):
         beg = seg.begin
         end = seg.end
-        if crossing:
+        if carry_beg is not None:
             # May merge with the next slice: keep the tail close enough to the
             # cut, emit the head only when it stands on its own.
             if carry_beg - beg >= dur:
