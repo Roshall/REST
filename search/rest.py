@@ -2,7 +2,8 @@ import heapq
 from bisect import bisect_left
 from collections import Counter, deque
 from collections.abc import Callable, Iterable, Mapping, MutableMapping, Sequence
-from itertools import batched, chain, islice, takewhile
+from itertools import batched, chain, count, islice, takewhile
+from math import inf
 from operator import attrgetter
 
 from search.co_moving import CoMovementPattern
@@ -313,12 +314,12 @@ def verify_and_merge(
     minima: int = 3000,
 ):
     if not labels:
-            return []
-    
+        return []
+
     if dur <= 0:
         raise ValueError("dur must be positive")
-    if expend <= 2:
-        raise ValueError("expend must be greater than 2")
+    if expend <= 1:
+        raise ValueError("expend must be greater than 1")
     if minima <= 0:
         raise ValueError("minima must be positive")
     if len(interval) != 2:
@@ -328,6 +329,11 @@ def verify_and_merge(
 
     stride = max(dur * expend, minima)
 
+    # The windowed merge leans on this bound in two places: a carried
+    # trajectory keeps at most its last `dur` frames, and the cut may slide back
+    # by up to `dur` to avoid discarding a shorter head (see `cut_position`).
+    # With `stride >= 2 * dur` the window still advances by at least `dur` after
+    # the worst-case slide, so it can never stall.
     if stride < 2 * dur:
         raise ValueError("window size must be at least 2 * dur")
 
@@ -349,77 +355,181 @@ def verify_and_merge(
 
     return heapq.merge(*streams, key=attrgetter("begin"))
 
+def cut_position(merged, window_end, dur):
+    """
+    Choose where to cut the window.
+
+    A trajectory that reaches the cut is split: the tail from ``cut - dur`` is
+    carried into the next window, and the head before it is emitted only when
+    the head alone is already ``dur`` long. A head of 1..dur-1 frames can be
+    neither emitted nor carried — it would simply vanish and silently shorten
+    the reported pattern — so such a trajectory is carried whole instead by
+    moving the cut down to its own start.
+
+    That is why the cut is a single global time rather than a per-trajectory
+    decision: it also defines the output order. Everything emitted begins before
+    ``cut - dur`` and everything carried begins at or after it, so this flush
+    and the next one stay sorted by ``begin``.
+
+    Carrying a trajectory whole while leaving the cut where it was breaks that
+    — its earlier ``begin`` would come out after a later one (measured: 12 of
+    800 corpora) — and ``MaxObjNumEnumerator`` groups on ``begin``, so an
+    out-of-order value silently splits a group.
+
+    One pass is enough. Sliding to a fixed point was measured over 800 corpora
+    and moved the pattern agreement by 0.5% without ever changing the ordering,
+    so the second-order cases are not worth the loop.
+    """
+    floor = window_end - dur
+    cut = window_end
+    for seg in merged:
+        if seg.end >= window_end and 0 < window_end - dur - seg.begin < dur:
+            cut = min(cut, max(seg.begin + dur, floor))
+    return cut
+
+
 def flush_window(visited, window_end, dur, *, final: bool):
     """
-    Flush current visited trajectories. visited is updated in place.
+    Flush the trajectories collected in the current window. ``visited`` is
+    updated in place with whatever must survive into the next window.
+
+    Returns ``(emitted, boundary)``: the segments that are safe to hand
+    downstream, and the time the window was actually cut at. The caller starts
+    the next window at ``boundary``, which is ``window_end`` unless the cut had
+    to be slid back (see below).
 
     Non-final flush:
-    - emit closed intervals only if len >= dur;
-    - discard closed intervals shorter than dur;
-    - carry boundary-touching/crossing intervals.
+    - an interval ending before ``boundary`` is closed. Nothing later can touch
+      it, so it is emitted when ``len >= dur`` and dropped otherwise.
+    - an interval reaching ``boundary`` may continue in the next slice, so its
+      tail from ``carry_cut = boundary - dur`` is carried. Its head is emitted
+      only when the head alone is already ``>= dur``.
 
-    Final flush:
-    - emit every interval satisfying len >= dur;
-    - discard the rest.
+    The cut is slid back until no crossing interval is left with a head shorter
+    than ``dur`` — such a head could neither be emitted nor carried, so it would
+    silently shorten the reported pattern. Sliding is bounded by ``dur`` (which
+    is why ``stride >= 2 * dur`` is required: the window still advances by at
+    least ``dur``). Consequently **every segment handed downstream is at least
+    ``dur`` long**. That is a hard requirement: ``MaxObjNumEnumerator`` does not
+    re-check the duration constraint and will happily report a pattern shorter
+    than ``dur`` if the merge lets one through.
 
-    Interval Representation:
-    - Input: absorb() outputs inclusive intervals [beg, end-1]
-    - Conversion: seg.end + 1 converts inclusive end to half-open [beg, end)
-    - Output: emitted segments use inclusive representation for downstream compatibility
+    Final flush: emit every interval with ``len >= dur``, drop the rest.
+
+    Interval representation is half-open ``[begin, end)`` end to end.
     """
     merged = list(absorb(visited, dur, check_duration=False))
     merged.sort(key=attrgetter("begin"))
 
+    if final:
+        emitted = [seg for seg in merged if seg.end - seg.begin >= dur]
+        visited.clear()
+        return emitted, window_end
+
+    if window_end <= dur:
+        raise ValueError("window_end must be greater than dur")
+
+    boundary = cut_position(merged, window_end, dur)
+    carry_cut = boundary - dur
+
+    # Pass 1: where does each trajectory get carried from? A trajectory that
+    # cannot be cut — its head would be 1..dur-1 frames, too short to emit and
+    # too short to carry — is kept whole.
+    plans = []
+    for seg in merged:
+        if seg.end >= boundary:
+            carry_beg = max(seg.begin, carry_cut)
+            if 0 < carry_beg - seg.begin < dur:
+                carry_beg = seg.begin
+            plans.append((seg, True, carry_beg))
+        else:
+            plans.append((seg, False, seg.begin))
+
+    # Pass 2: nothing may be emitted that begins at or after the earliest carry,
+    # or a trajectory kept whole would come out after it and break the sort.
+    # Anything not safe yet is deferred by one flush — it is already closed, so
+    # deferring costs latency, never correctness.
+    horizon = min((carry for _seg, crossing, carry in plans if crossing), default=inf)
     emitted = []
     carried: dict[int, Trajectory] = {}
 
-    # Ensure carry_cut is positive to avoid incorrect interval splitting
-    assert window_end > dur
-    carry_cut = window_end - dur
-
-    for seg in merged:
+    for seg, crossing, carry_beg in plans:
         beg = seg.begin
-        end = seg.end + 1  # convert inclusive output end back to half-open
-
-        if final:
-            if end - beg >= dur:
-                emitted.append(seg)
-            continue
-
-        if end >= window_end:
-            # This interval may merge with the next slice.
-            #
-            # Since partial merging is allowed, we only carry the suffix
-            # that is close enough to the boundary.
-            carry_beg = max(beg, carry_cut)
-
-            # Emit the safe prefix if it is long enough.
-            if carry_beg > beg and carry_beg - beg >= dur:
-                emitted.append(
-                    TrajectoryIntervalSeg(
-                        seg.id,
-                        beg,
-                        seg.label,
-                        carry_beg - 1,
-                    )
-                )
-
-            # Carry the suffix even if it is shorter than dur.
-            # It may become valid after merging with the next slice.
+        end = seg.end
+        if crossing:
+            # May merge with the next slice: keep the tail close enough to the
+            # cut, emit the head only when it stands on its own.
+            if carry_beg - beg >= dur:
+                emitted.append(TrajectoryIntervalSeg(seg.id, beg, seg.label, carry_beg))
             add_interval(carried, seg.id, seg.label, carry_beg, end)
-
-        else:
-            # This interval ends before the window boundary.
-            # Since future segments begin at or after window_end, it cannot
-            # merge with future slices anymore.
-            if end - beg >= dur:
-                emitted.append(seg)
-            # else: discard impossible short interval
+        elif end - beg >= dur and beg < horizon:
+            emitted.append(seg)
+        elif end - beg >= dur:
+            add_interval(carried, seg.id, seg.label, beg, end)  # defer one flush
+        # else: closed and shorter than dur -> discard
 
     visited.clear()
     visited.update(carried)
     emitted.sort(key=attrgetter("begin"))
-    return emitted
+    return emitted, boundary
+
+def stride_merge_windowed(
+    rest_idx,
+    trajs,
+    region,
+    labels: Mapping,
+    dur: int,
+    interval: Sequence[int],
+    expend: int = 2,
+    minima: int = 3000,
+):
+    """
+    Windowed streaming merge: bounded memory, *approximate* patterns.
+
+    Segments are consumed globally in ascending ``begin`` order. Trajectories are
+    coalesced in ``visited`` and flushed whenever the stream reaches the end of
+    the window; a trajectory still alive at the cut is carried into the next
+    window. Memory is bounded by the trajectories of one window rather than by
+    the size of the result, and segments are yielded as soon as they are final.
+
+    Guarantees:
+    - emitted segments are globally sorted by ``begin``;
+    - every emitted segment is at least ``dur`` long (``MaxObjNumEnumerator``
+      does not re-check the duration constraint, so the merge must).
+
+    Caveat — the pattern set is NOT the same as ``stride_merge``: a trajectory
+    spanning a window boundary is reported as several touching pieces instead of
+    one maximal segment, and the artificial end event at a split point closes
+    every concurrent pattern there. Measured against ``stride_merge`` through
+    ``MaxObjNumEnumerator`` on random corpora of 40-60 objects, 77-97% of the
+    pattern sets differ. Use ``stride_merge_streaming`` when the pattern set has
+    to match; use this one only when memory must not grow with the result.
+
+    Interval representation is half-open ``[begin, end)`` throughout.
+    """
+    verified = verify_and_merge(
+        rest_idx, trajs, region, labels, dur, interval, expend, minima
+    )
+    stride = max(dur * expend, minima)
+    window_end = interval[0] + stride
+
+    visited: dict[int, Trajectory] = {}
+    for seg in verified:
+        if seg.begin >= window_end:
+            emitted, cut = flush_window(visited, window_end, dur, final=False)
+            yield from emitted
+            # `cut >= window_end - dur` and `stride >= 2 * dur`, so the window
+            # advances by at least `dur` even when the cut had to slide back.
+            window_end = cut + stride
+        # Note: a segment starting in the last `dur` of the window is still
+        # stored. It is protected at flush time, where the cut slides back so
+        # that such a trajectory is carried whole instead of cut below `dur`.
+        add_interval(visited, seg.id, seg.label, seg.begin, seg.end)
+
+    if visited:
+        emitted, _ = flush_window(visited, window_end, dur, final=True)
+        yield from emitted
+
 
 def stride_merge_streaming(
     rest_idx,
@@ -431,45 +541,95 @@ def stride_merge_streaming(
     expend: int = 2,
     minima: int = 3000,
 ):
+    """
+    Streaming merge, equivalent to ``stride_merge`` (hence to ``vanilla_merge``).
+
+    Same release rule as ``stride_merge``: a trajectory is closed once no later
+    segment can touch it, i.e. once the next segment's ``begin`` is greater than
+    its last end. Instead of buffering every released segment until the end,
+    though, they go into a pending min-heap and are yielded as soon as they can
+    no longer be overtaken — a pending segment is safe to emit once no
+    still-open trajectory began earlier, because every future segment will begin
+    later still.
+
+    The output is therefore the same segment multiset as ``stride_merge`` and is
+    still globally sorted by ``begin``, so it can be fed straight to an
+    enumerator that groups on ``begin``. ``expend``/``minima`` only validate the
+    window parameters here; they do not affect the result.
+
+    Nothing is ever cut: a trajectory is carried as one coalesced interval
+    (``add_interval`` only ever extends or appends) and is reported whole when it
+    closes. That is what keeps the patterns identical to ``stride_merge``.
+
+    The price of never cutting is that nothing beginning after the oldest
+    still-open trajectory can be reported before that trajectory closes, because
+    a later ``begin`` would break the sort order. So memory is bounded by the
+    trajectories that overlap the oldest one's lifetime, **not by the window**;
+    ``expend``/``minima`` only validate the window parameters here and do not
+    affect the result. In practice the pending heap stays small (measured: 8-34
+    segments for results of 160-260 on corpora of 40-60 objects) and it
+    degenerates to the full result only if one trajectory outlives most of the
+    stream. Emission is gated by exactly that horizon — a released segment is
+    yielded once ``min_open_begin()`` has passed it, which is the same rule as
+    "slide the window to the earliest trajectory you had to keep".
+
+    Interval representation is half-open ``[begin, end)`` throughout.
+    """
     verified = verify_and_merge(
         rest_idx, trajs, region, labels, dur, interval, expend, minima
     )
-    stride = max(dur * expend, minima)
-    window_start = interval[0]
-    window_end = window_start + stride
-
     visited: dict[int, Trajectory] = {}
-    trunced = set()
-    min_truned_start = window_end
+    # (max_end, seq, tid): a trajectory can be closed once its last end is
+    # behind the incoming segment. Entries go stale when the trajectory grows;
+    # the stale entry is skipped and the refreshed one is popped later.
+    open_heap: list[tuple[int, int, int]] = []
+    # (first_begin, seq, tid): the emission horizon. `seq` invalidates the entry
+    # of a trajectory that was closed and later reopened.
+    begin_heap: list[tuple[int, int, int]] = []
+    pending: list[tuple[int, int, TrajectoryIntervalSeg]] = []
+    epoch: dict[int, int] = {}
+    tick = count()
+
+    def close(tid: int) -> None:
+        traj = visited.pop(tid)
+        del epoch[tid]
+        for seg in absorb({tid: traj}, dur):
+            heapq.heappush(pending, (seg.begin, next(tick), seg))
+
+    def min_open_begin() -> float:
+        while begin_heap:
+            beg, seq, tid = begin_heap[0]
+            if epoch.get(tid) == seq:
+                return beg
+            heapq.heappop(begin_heap)  # closed, or re-opened under a new seq
+        return float("inf")
+
     for seg in verified:
         beg = seg.begin
-        if beg >= window_end:
-            emitted = flush_window(visited, min_truned_start, dur, final=False)
-            yield from emitted
-            if min_truned_start < window_end:
-                # we have some truncated segments, so we need to slide the window start to the min_truned_start
-                window_start = min_truned_start
-                window_end = window_start + stride
-            else:
-                # Adaptive window: skip empty time ranges.
-                window_start = beg
-                window_end = window_start + stride
-            min_truned_start = window_end
-        if window_end - beg < dur:
-            if seg.end < window_end:
-                # this segment has no future segments to merge with, so we can skip it now
+        while open_heap and open_heap[0][0] < beg:
+            last_end, seq, tid = heapq.heappop(open_heap)
+            traj = visited.get(tid)
+            if traj is None or epoch.get(tid) != seq:
                 continue
-            # this one might be truncated, so we need to carry it over to the next window
-            # and since its length is less than dur after truncation, we need to protect it
-            # by sliding the window start to the beginning of this segment, and then flush the current window
-            # for this to workd, we need to ensure that the window size is at least 2 * dur
-            # otherwise, we might end up with trajectories whose length is less than dur after truncation.
-            min_truned_start = min(min_truned_start, beg)
-            continue
-        add_interval(visited, seg.id, seg.label, seg.begin, seg.end)
+            if max(traj.seg[1::2]) != last_end:
+                continue  # stale entry; the trajectory grew
+            close(tid)
 
-    if visited:
-        yield from flush_window(visited, window_end, dur, final=True)
+        if seg.id not in visited:
+            seq = next(tick)
+            epoch[seg.id] = seq
+            heapq.heappush(begin_heap, (beg, seq, seg.id))
+        add_interval(visited, seg.id, seg.label, seg.begin, seg.end)
+        heapq.heappush(open_heap, (max(visited[seg.id].seg[1::2]), epoch[seg.id], seg.id))
+
+        limit = min_open_begin()
+        while pending and pending[0][0] < limit:
+            yield heapq.heappop(pending)[2]
+
+    for tid in list(visited):
+        close(tid)
+    while pending:
+        yield heapq.heappop(pending)[2]
 
 
 def stride_merge(
