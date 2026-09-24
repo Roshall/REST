@@ -1,0 +1,119 @@
+{
+  "41": {
+    "life_border": [
+      2,
+      52
+    ],
+    "reg_border": [
+      205,
+      1874,
+      279,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "56": {
+    "life_border": [
+      2,
+      65
+    ],
+    "reg_border": [
+      79,
+      1876,
+      223,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "0": {
+    "life_border": [
+      2,
+      235
+    ],
+    "reg_border": [
+      27,
+      1910,
+      228,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "60": {
+    "life_border": [
+      2,
+      139
+    ],
+    "reg_border": [
+      91,
+      1830,
+      248,
+      1076
+    ],
+    "tempo_stride": 60
+  },
+  "39": {
+    "life_border": [
+      2,
+      43
+    ],
+    "reg_border": [
+      23,
+      1842,
+      269,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "8": {
+    "life_border": [
+      2,
+      60
+    ],
+    "reg_border": [
+      1326,
+      1911,
+      222,
+      1077
+    ],
+    "tempo_stride": 60
+  },
+  "26": {
+    "life_border": [
+      2,
+      26
+    ],
+    "reg_border": [
+      121,
+      1516,
+      263,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "25": {
+    "life_border": [
+      2,
+      132
+    ],
+    "reg_border": [
+      40,
+      1912,
+      147,
+      949
+    ],
+    "tempo_stride": 60
+  },
+  "2": {
+    "life_border": [
+      2,
+      58
+    ],
+    "reg_border": [
+      27,
+      1907,
+      192,
+      415
+    ],
+    "tempo_stride": 60
+  }
+}

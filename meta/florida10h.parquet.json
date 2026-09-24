@@ -1,0 +1,119 @@
+{
+  "2": {
+    "life_border": [
+      2,
+      148
+    ],
+    "reg_border": [
+      5,
+      1904,
+      396,
+      1079
+    ],
+    "tempo_stride": 60
+  },
+  "0": {
+    "life_border": [
+      2,
+      58
+    ],
+    "reg_border": [
+      10,
+      1908,
+      412,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "1": {
+    "life_border": [
+      2,
+      168
+    ],
+    "reg_border": [
+      98,
+      1912,
+      496,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "10": {
+    "life_border": [
+      2,
+      204
+    ],
+    "reg_border": [
+      13,
+      1778,
+      499,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "26": {
+    "life_border": [
+      2,
+      30
+    ],
+    "reg_border": [
+      10,
+      1642,
+      494,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "7": {
+    "life_border": [
+      4,
+      165
+    ],
+    "reg_border": [
+      7,
+      1878,
+      410,
+      1076
+    ],
+    "tempo_stride": 60
+  },
+  "73": {
+    "life_border": [
+      2,
+      185
+    ],
+    "reg_border": [
+      18,
+      1385,
+      696,
+      1079
+    ],
+    "tempo_stride": 60
+  },
+  "24": {
+    "life_border": [
+      2,
+      55
+    ],
+    "reg_border": [
+      21,
+      1535,
+      461,
+      1079
+    ],
+    "tempo_stride": 60
+  },
+  "58": {
+    "life_border": [
+      2,
+      237
+    ],
+    "reg_border": [
+      243,
+      1739,
+      490,
+      1080
+    ],
+    "tempo_stride": 60
+  }
+}

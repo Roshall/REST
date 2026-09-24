@@ -1,0 +1,125 @@
+{
+  "0": {
+    "life_border": [
+      1,
+      18,
+      68,
+      150,
+      360
+    ],
+    "reg_border": [
+      2,
+      1917,
+      31,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "2": {
+    "life_border": [
+      2,
+      10,
+      42,
+      105,
+      267
+    ],
+    "reg_border": [
+      2,
+      1914,
+      25,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "9": {
+    "life_border": [
+      2,
+      28
+    ],
+    "reg_border": [
+      5,
+      1914,
+      34,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "1": {
+    "life_border": [
+      2,
+      27
+    ],
+    "reg_border": [
+      9,
+      1911,
+      162,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "36": {
+    "life_border": [
+      1,
+      7
+    ],
+    "reg_border": [
+      40,
+      1906,
+      229,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "25": {
+    "life_border": [
+      2,
+      43
+    ],
+    "reg_border": [
+      7,
+      1912,
+      138,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "24": {
+    "life_border": [
+      2,
+      20
+    ],
+    "reg_border": [
+      12,
+      1842,
+      363,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "3": {
+    "life_border": [
+      2,
+      40
+    ],
+    "reg_border": [
+      3,
+      1914,
+      62,
+      1080
+    ],
+    "tempo_stride": 60
+  },
+  "10": {
+    "life_border": [
+      2,
+      27
+    ],
+    "reg_border": [
+      9,
+      1800,
+      177,
+      1080
+    ],
+    "tempo_stride": 60
+  }
+}
