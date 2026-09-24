@@ -73,15 +73,8 @@ def index_based_framework(
             trajs = vanilla_merge(rest_idx, trajs, region, labels, dur, interval)
         case "one":
             match enu_mtd:
-                case ("max", "obj"):
-                    # one_pass_merge streams per-cell segments without
-                    # coalescing them per object, so the enumerator would see a
-                    # single object as several pieces. Absorb first so all merge
-                    # strategies hand the enumerator the same segment multiset.
-                    trajs = coalesce(
-                        one_pass_merge(rest_idx, trajs, region, labels, dur, interval),
-                        dur,
-                    )
+                case ("max", "dur"):
+                    trajs = one_pass_merge(rest_idx, trajs, region, labels, dur, interval)
                 case _:
                     trajs = stride_merge(rest_idx, trajs, region, labels, dur, interval)
         case _:
