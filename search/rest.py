@@ -476,6 +476,45 @@ def flush_window(visited, window_end, dur, *, final: bool):
     emitted.sort(key=attrgetter("begin"))
     return emitted, boundary
 
+
+def _coalesce_segments(segs: Iterable) -> list:
+    """Merge touching/overlapping segments of the same object into one.
+
+    ``stride_merge_windowed`` legitimately reports a trajectory that spans a
+    window boundary as several *touching* pieces (the cut never shortens a
+    reported segment). ``MaxObjNumEnumerator`` groups on ``begin`` and pops an
+    object from its active set *before* the next piece is added, so it treats
+    the pieces as a leave-then-rejoin and splits any concurrent pattern at the
+    boundary -- making the final pattern set differ from ``stride_merge`` even
+    though the object is present continuously. Coalescing here restores one
+    segment per object, so the enumerator sees the same continuous presence it
+    gets from ``stride_merge`` and returns the identical pattern multiset.
+
+    Adjacent runs for the same object whose intervals merely touch
+    (``next.begin == prev.end``) are merged; a genuine gap leaves two runs.
+    """
+    groups: dict = {}
+    for s in segs:
+        groups.setdefault(s.id, []).append(s)
+    out = []
+    for tid, lst in groups.items():
+        lst.sort(key=attrgetter("begin"))
+        cur = None
+        for s in lst:
+            if cur is None:
+                cur = s
+            elif s.begin <= cur.end:  # touching or overlapping -> continuous
+                cur = TrajectoryIntervalSeg(
+                    tid, min(cur.begin, s.begin), s.label, max(cur.end, s.end)
+                )
+            else:
+                out.append(cur)
+                cur = s
+        out.append(cur)
+    out.sort(key=lambda x: (x.begin, x.end))
+    return out
+
+
 def stride_merge_windowed(
     rest_idx,
     trajs,
@@ -517,10 +556,11 @@ def stride_merge_windowed(
     window_end = interval[0] + stride
 
     visited: dict[int, Trajectory] = {}
+    out: list = []
     for seg in verified:
         if seg.begin >= window_end:
             emitted, cut = flush_window(visited, window_end, dur, final=False)
-            yield from emitted
+            out.extend(emitted)
             # `cut >= window_end - dur` and `stride >= 2 * dur`, so the window
             # advances by at least `dur` even when the cut had to slide back.
             window_end = cut + stride
@@ -531,7 +571,12 @@ def stride_merge_windowed(
 
     if visited:
         emitted, _ = flush_window(visited, window_end, dur, final=True)
-        yield from emitted
+        out.extend(emitted)
+
+    # Coalesce touching/overlapping same-object pieces produced by a boundary
+    # split (see ``_coalesce_segments``) so the enumerator returns the same
+    # pattern multiset as ``stride_merge``.
+    yield from _coalesce_segments(out)
 
 
 def stride_merge_streaming(
