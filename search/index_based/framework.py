@@ -4,8 +4,41 @@ from typing import Union
 from search.index_based.base import base_enumerate
 from search.index_based.max_dur import max_dur_enumerate
 from search.index_based.max_obj import MaxObjNumEnumerator
-from search.rest import coalesce, one_pass_merge, stride_merge, vanilla_merge
+from search.rest import (
+    coalesce,
+    one_pass_merge,
+    stride_merge,
+    stride_merge_windowed,
+    vanilla_merge,
+)
 from utilities.time_unit import interval_to_frames, seconds_to_frames
+
+
+def _parse_method_str(method: str):
+    """Parse a method string into ``(enu_mtd, merge_mtd, win_args)``.
+
+    Supports the same token form as the C++ backend, e.g.
+    ``"max_obj_win_m1500_e2"`` -> ``(("max", "obj"), "win", {"minima": 1500,
+    "expend": 2})``. Without a ``win`` token the behaviour matches the legacy
+    string form (enum method only, ``multi`` merge).
+    """
+    parts = method.split("_")
+    enum_sub = None
+    merge_mtd = "multi"
+    win_args = {"minima": 3000, "expend": 2}
+    if "win" in parts:
+        for p in parts:
+            if p in ("dur", "obj"):
+                enum_sub = p
+            elif p == "win":
+                merge_mtd = "win"
+            elif p.startswith("m") and p[1:].isdigit():
+                win_args["minima"] = int(p[1:])
+            elif p.startswith("e") and p[1:].isdigit():
+                win_args["expend"] = int(p[1:])
+        return ("max", enum_sub or "obj"), merge_mtd, win_args
+    # Legacy string form: a bare enum method name (e.g. "base", "max").
+    return (method,), "multi", win_args
 
 
 def index_based_framework(
@@ -55,14 +88,23 @@ def index_based_framework(
 
     # Parse method configuration
     if isinstance(method, str):
-        enu_mtd = (method,)
-        merge_mtd = "multi"
+        enu_mtd, merge_mtd, win_args = _parse_method_str(method)
     elif len(method) == 3:
         enu_mtd = tuple(method[:2])
         merge_mtd = method[2]
+        win_args = {}
     elif len(method) == 2:
         enu_mtd = tuple(method)
         merge_mtd = "multi"
+        win_args = {}
+    elif len(method) in (4, 5) and method[2] == "win":
+        # ("max", "obj", "win", minima=, expend=) -- window tuning
+        enu_mtd = tuple(method[:2])
+        merge_mtd = "win"
+        win_args = {
+            "minima": method[3] if len(method) >= 4 else 3000,
+            "expend": method[4] if len(method) == 5 else 2,
+        }
     else:
         raise ValueError(
             f"Invalid method format: {method}. Expected string, 2-tuple, or 3-tuple"
@@ -77,6 +119,19 @@ def index_based_framework(
                     trajs = one_pass_merge(rest_idx, trajs, region, labels, dur, interval)
                 case _:
                     trajs = stride_merge(rest_idx, trajs, region, labels, dur, interval)
+        case "win":
+            # Bounded-memory windowed streaming merge. It is a generator that
+            # yields one maximal segment per object (crossing trajectories are
+            # carried whole across the cut), so the pattern set equals
+            # `stride_merge`. Materialised here for the same list contract the
+            # other merge strategies hand to the enumerator.
+            trajs = list(
+                stride_merge_windowed(
+                    rest_idx, trajs, region, labels, dur, interval,
+                    expend=win_args.get("expend", 2),
+                    minima=win_args.get("minima", 3000),
+                )
+            )
         case _:
             raise ValueError(f"Unknown merge method {merge_mtd} in {method}")
 

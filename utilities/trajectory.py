@@ -47,6 +47,11 @@ class BasicTrajectorySeg:
 @dataclass(slots=True)
 class TrajectoryIntervalSeg(BasicTrajectorySeg):
     end: int
+    # ``cut`` marks a segment that is the head of a window-boundary split: its
+    # ``end`` is exactly the ``begin`` of the tail that the merge carries into the
+    # next window. Enumerators use it to keep the object alive (treat the split
+    # as a continuation) instead of reading it as a leave-then-rejoin.
+    cut: bool = False
 
 
 @dataclass(slots=True)
