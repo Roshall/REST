@@ -120,11 +120,12 @@ def index_based_framework(
                 case _:
                     trajs = stride_merge(rest_idx, trajs, region, labels, dur, interval)
         case "win":
-            # Bounded-memory windowed streaming merge. It is a generator that
-            # yields one maximal segment per object (crossing trajectories are
-            # carried whole across the cut), so the pattern set equals
-            # `stride_merge`. Materialised here for the same list contract the
-            # other merge strategies hand to the enumerator.
+            # Bounded-memory windowed streaming merge. It cuts a trajectory
+            # that crosses a window boundary into a head plus a touching tail,
+            # and MaxObjNumEnumerator re-joins them, so the pattern set equals
+            # `stride_merge`'s while memory stays bounded by the window.
+            # Materialised here for the same list contract the other merge
+            # strategies hand to the enumerator.
             trajs = list(
                 stride_merge_windowed(
                     rest_idx, trajs, region, labels, dur, interval,

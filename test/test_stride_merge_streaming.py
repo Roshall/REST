@@ -146,6 +146,44 @@ def test_windowed_variant_also_never_emits_short_segments():
         assert begins == sorted(begins)
 
 
+def test_windowed_keeps_a_cut_head_that_ends_before_start_plus_dur():
+    """A cut can land inside the first `dur` frames of the query interval.
+
+    ``stride_merge_windowed`` then hands the enumerator a head that ends before
+    ``interval[0] + dur`` and a tail that begins exactly where it ends. The
+    head is only a *piece* of its object, so it must survive the enumerator's
+    start filter: dropping it deletes the object from every pattern spanning
+    the interval start, and its tail reads as a new object that began at the
+    cut. Real-data repro: florida10h, interval (560000, 572000), dur 900, where
+    that cost a whole ([1, 2] 140 399)-shaped pattern.
+
+    ``stride = max(2 * dur, 250) = 250`` is deliberately below ``3 * dur``:
+    only then can the cut slide down into the first `dur` frames (object 3
+    crosses the window end and forces the slide to its own begin + dur).
+    """
+    segs = [
+        (1, 0, 0, 400),      # cut at 170: head [0, 170), tail [170, 400)
+        (2, 0, 140, 400),    # begins before the cut -> the pattern starts at 140
+        (3, 0, 170, 400),    # reaches the window end -> forces the slide
+        (4, 0, 350, 360),    # arrives at the window end -> forces the flush
+    ]
+    dur, minima, interval = 100, 250, (100, 500)
+    labels = {0: 2}
+
+    out = run(m.stride_merge_windowed, segs, dur=dur, minima=minima,
+              interval=interval, labels=labels)
+    ref = run(m.stride_merge, segs, dur=dur, minima=minima,
+              interval=interval, labels=labels)
+
+    assert any(s.cut and s.end < interval[0] + dur for s in out), \
+        "this corpus no longer exercises a cut inside the first dur frames"
+    assert patterns(out, labels, dur, interval) == patterns(ref, labels, dur, interval)
+    assert patterns(out, labels, dur, interval) == [
+        ((1, 2), 140, 399),
+        ((1, 2, 3), 170, 399),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # parameter validation
 # ---------------------------------------------------------------------------

@@ -316,7 +316,17 @@ class MaxObjNumEnumerator:
                     self._add(trajs)
                     return ts
             else:
-                self._add(tra for tra in trajs if tra.end >= min_end)
+                # A cut head is only a *piece* of its object: its tail begins
+                # exactly where it ends, so the occupancy continues past
+                # `min_end` even when this piece does not. Filtering such a head
+                # out deletes the object for every pattern spanning the interval
+                # start, and its tail then reads as a new object that began at
+                # the cut. Keep it, and let the read-ahead join it back.
+                self._add(
+                    tra
+                    for tra in trajs
+                    if tra.end >= min_end or getattr(tra, "cut", False)
+                )
         else:
             if self.end_q:
                 return start

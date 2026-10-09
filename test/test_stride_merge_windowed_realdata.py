@@ -8,24 +8,17 @@ tuple ``("max", "obj", "win", 1500, 2)``) or, for the experiment harness, throug
 the C++ backend via ``CxxIndex.query(method=...)``. Its window size is
 ``stride = max(dur * expend, minima)`` (``expend`` defaults to 2).
 
-Why the Python path is now consistent:
-  ``stride_merge_windowed`` is a streaming generator: it consumes the verified
-  stream in ascending ``begin`` order, coalesces each object in ``visited``
-  (``add_interval``), and flushes the current window whenever the stream reaches
-  the window end. A trajectory that is still alive at the cut is carried *whole*
-  into the next window (``flush_window``), not split into a head + tail. Because
-  no object is ever reported as two touching pieces, ``MaxObjNumEnumerator`` sees
-  exactly one maximal segment per object -- the same multiset ``stride_merge``
-  yields -- so the pattern set is identical while memory stays bounded by the
-  trajectories that cross the cut rather than by the result size.
-
-  (An earlier attempt split crossing trajectories and then re-merged the touching
-  pieces before yielding. That buffering broke the streaming property -- an
-  unbounded stream would never emit -- so the split was dropped in favour of
-  carrying the whole interval.)
-
-The C++ twin (``search_cxx``) has NOT yet received the same whole-carry fix, so its
-windowed method is still expected to diverge and is marked ``xfail`` there.
+Why both backends are consistent: the merge is a streaming generator that cuts a
+trajectory crossing a window boundary into a head (emitted when the window
+flushes) plus a touching tail (carried into the next window).
+``MaxObjNumEnumerator`` reads ``dur`` frames ahead and re-joins such a piece when
+it begins exactly at the open object's current end, so the occupancy survives the
+cut instead of being read as a leave-then-rejoin. It also keeps a cut head in
+``_init_state`` even when that head ends before ``interval[0] + dur`` -- the head
+is a piece, not a closed segment -- which is what keeps an object alive across a
+cut landing inside the first ``dur`` frames of the interval. The reported pattern
+set is therefore the same as ``stride_merge``'s, while memory stays bounded by the
+trajectories that cross the cut. Both the Python and the C++ twin do this.
 
 Contract: ``stride >= 2 * dur`` is a *correctness* floor (every emitted segment is
 >= ``dur`` and the window advances by >= ``dur``). The tests exercise windows
@@ -126,11 +119,7 @@ def test_cxx_windowed_matches_validated_methods(lo, hi, dur, win_method):
                 for m in REF_METHODS}
         assert refs["max_obj_one"] == refs["max_dur_multi"], "baseline refs diverged"
         for m in REF_METHODS:
-            if refs[m] != win:
-                pytest.xfail(
-                    f"C++ {win_method} still diverges from {m} (coalescing fix not "
-                    f"yet ported to search_cxx). Python twin is consistent."
-                )
+            assert refs[m] == win, f"C++ {win_method} diverges from {m}"
     finally:
         os.remove(meta_path)
 

@@ -490,8 +490,8 @@ def stride_merge_windowed(
     minima: int = 3000,
 ):
     """
-    Windowed streaming merge: bounded memory, low latency, patterns may split
-    at window cuts (see below).
+    Windowed streaming merge: bounded memory, low latency, same patterns as
+    ``stride_merge`` (see below).
 
     Segments are consumed globally in ascending ``begin`` order. Trajectories are
     coalesced in ``visited`` (``add_interval``) and flushed whenever the stream
@@ -502,13 +502,13 @@ def stride_merge_windowed(
 
     Because the merge cuts, ``MaxObjNumEnumerator`` would otherwise read a
     touching cut as a leave-then-rejoin and split every concurrent pattern at the
-    boundary. The enumerator re-merges a cut when the tail's group arrives (an
-    ``end_q`` entry whose end equals the current group ``begin``): the object
-    stays alive and the tail's end replaces the head's. This merge fires only
-    when the head is still the front of ``end_q`` at the tail's group; a head
-    that surfaces earlier is expired first, so a concurrent pattern can still be
-    reported as several shorter patterns around a cut. Fixing that split while
-    keeping the cut (low latency) is open work.
+    boundary. The enumerator kills that off by reading ``dur`` frames ahead of the
+    group it closes: a piece that begins exactly at an open id's current end is a
+    continuation, so the occupancy is extended instead of expired. The head is
+    also kept by the enumerator's start filter (``_init_state``) even when it
+    ends before ``interval[0] + dur`` -- it is a piece, not a closed segment --
+    which is what keeps an object alive across a cut that lands inside the first
+    ``dur`` frames of the interval.
 
     Guarantees:
     - emitted segments are globally sorted by ``begin``;
@@ -517,7 +517,9 @@ def stride_merge_windowed(
     - memory is bounded by the trajectories that cross the cut, and the merge
       yields incrementally (a cut head is emitted as soon as its window
       flushes — the delay a long trajectory imposes on others is bounded by the
-      window, not by the trajectory's own length).
+      window, not by the trajectory's own length);
+    - the reported pattern set is the same as ``stride_merge``'s: the window only
+      bounds memory and latency, it does not change the answer.
 
     Interval representation is half-open ``[begin, end)`` throughout.
     """
