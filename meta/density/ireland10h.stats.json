@@ -1,0 +1,58 @@
+{
+  "dataset": "ireland",
+  "parquet": "ireland10h.parquet",
+  "source": "/home/cw/DataSet/Dataset/youtube/10h/interp_pd/ireland10h.parquet",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "fid_min": 1,
+  "fid_max": 1080000,
+  "n_frames": 1080000,
+  "total_points": 94695821,
+  "classes": [
+    0,
+    24,
+    26,
+    58,
+    56,
+    74,
+    9,
+    67,
+    28
+  ],
+  "class_points": {
+    "0": 68684014,
+    "24": 9728079,
+    "26": 8862385,
+    "58": 3003857,
+    "56": 1298045,
+    "74": 1031373,
+    "9": 442730,
+    "67": 401252,
+    "28": 396113
+  },
+  "params": {
+    "cell_px": 32,
+    "t_bucket_sec": 60,
+    "joint_cell_px": 64,
+    "joint_bucket_sec": 300
+  },
+  "shapes": {
+    "spatial": [
+      9,
+      34,
+      60
+    ],
+    "temporal": [
+      9,
+      600
+    ],
+    "joint": [
+      9,
+      120,
+      17,
+      30
+    ]
+  },
+  "npz": "ireland10h.stats.npz"
+}

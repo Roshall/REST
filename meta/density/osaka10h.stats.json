@@ -1,0 +1,58 @@
+{
+  "dataset": "osaka",
+  "parquet": "osaka10h.parquet",
+  "source": "/home/cw/DataSet/Dataset/youtube/10h/interp_pd/osaka10h.parquet",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "fid_min": 1,
+  "fid_max": 1078921,
+  "n_frames": 1078921,
+  "total_points": 111932065,
+  "classes": [
+    0,
+    26,
+    28,
+    25,
+    24,
+    11,
+    2,
+    3,
+    1
+  ],
+  "class_points": {
+    "0": 96695869,
+    "26": 8523169,
+    "28": 2118152,
+    "25": 1135943,
+    "24": 1096978,
+    "11": 811796,
+    "2": 292039,
+    "3": 273057,
+    "1": 247062
+  },
+  "params": {
+    "cell_px": 32,
+    "t_bucket_sec": 60,
+    "joint_cell_px": 64,
+    "joint_bucket_sec": 300
+  },
+  "shapes": {
+    "spatial": [
+      9,
+      34,
+      60
+    ],
+    "temporal": [
+      9,
+      600
+    ],
+    "joint": [
+      9,
+      120,
+      17,
+      30
+    ]
+  },
+  "npz": "osaka10h.stats.npz"
+}

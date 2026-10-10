@@ -1,0 +1,58 @@
+{
+  "dataset": "timesquare",
+  "parquet": "timesquare10h.parquet",
+  "source": "/home/cw/DataSet/Dataset/youtube/10h/interp_pd/timesquare10h.parquet",
+  "fps": 30,
+  "width": 2560,
+  "height": 1440,
+  "fid_min": 1,
+  "fid_max": 1081629,
+  "n_frames": 1081629,
+  "total_points": 1237563238,
+  "classes": [
+    0,
+    2,
+    26,
+    24,
+    56,
+    25,
+    9,
+    1,
+    28
+  ],
+  "class_points": {
+    "0": 1174642953,
+    "2": 34294459,
+    "26": 7836292,
+    "24": 6826436,
+    "56": 5112244,
+    "25": 2412998,
+    "9": 2407971,
+    "1": 979983,
+    "28": 944819
+  },
+  "params": {
+    "cell_px": 32,
+    "t_bucket_sec": 60,
+    "joint_cell_px": 64,
+    "joint_bucket_sec": 300
+  },
+  "shapes": {
+    "spatial": [
+      9,
+      45,
+      80
+    ],
+    "temporal": [
+      9,
+      601
+    ],
+    "joint": [
+      9,
+      121,
+      23,
+      40
+    ]
+  },
+  "npz": "timesquare10h.stats.npz"
+}

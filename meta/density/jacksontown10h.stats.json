@@ -1,0 +1,58 @@
+{
+  "dataset": "jacksontown",
+  "parquet": "jacksontown10h.parquet",
+  "source": "/home/cw/DataSet/Dataset/youtube/10h/interp_pd/jacksontown10h.parquet",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "fid_min": 1,
+  "fid_max": 1080000,
+  "n_frames": 1080000,
+  "total_points": 60237396,
+  "classes": [
+    0,
+    2,
+    9,
+    7,
+    58,
+    26,
+    1,
+    17,
+    3
+  ],
+  "class_points": {
+    "0": 31520996,
+    "2": 13086188,
+    "9": 8025539,
+    "7": 4246048,
+    "58": 945875,
+    "26": 583127,
+    "1": 363124,
+    "17": 343190,
+    "3": 284788
+  },
+  "params": {
+    "cell_px": 32,
+    "t_bucket_sec": 60,
+    "joint_cell_px": 64,
+    "joint_bucket_sec": 300
+  },
+  "shapes": {
+    "spatial": [
+      9,
+      34,
+      60
+    ],
+    "temporal": [
+      9,
+      600
+    ],
+    "joint": [
+      9,
+      120,
+      17,
+      30
+    ]
+  },
+  "npz": "jacksontown10h.stats.npz"
+}

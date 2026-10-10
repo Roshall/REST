@@ -1,0 +1,58 @@
+{
+  "dataset": "florida",
+  "parquet": "florida10h.parquet",
+  "source": "/home/cw/DataSet/Dataset/youtube/10h/interp_pd/florida10h.parquet",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "fid_min": 1,
+  "fid_max": 1080000,
+  "n_frames": 1080000,
+  "total_points": 26418928,
+  "classes": [
+    2,
+    0,
+    10,
+    58,
+    74,
+    1,
+    7,
+    25,
+    73
+  ],
+  "class_points": {
+    "2": 11968091,
+    "0": 7300489,
+    "10": 1920399,
+    "58": 1361332,
+    "74": 1096328,
+    "1": 1086973,
+    "7": 539974,
+    "25": 411699,
+    "73": 340509
+  },
+  "params": {
+    "cell_px": 32,
+    "t_bucket_sec": 60,
+    "joint_cell_px": 64,
+    "joint_bucket_sec": 300
+  },
+  "shapes": {
+    "spatial": [
+      9,
+      34,
+      60
+    ],
+    "temporal": [
+      9,
+      600
+    ],
+    "joint": [
+      9,
+      120,
+      17,
+      30
+    ]
+  },
+  "npz": "florida10h.stats.npz"
+}

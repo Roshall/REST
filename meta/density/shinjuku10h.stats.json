@@ -1,0 +1,58 @@
+{
+  "dataset": "shinjuku",
+  "parquet": "shinjuku10h.parquet",
+  "source": "/home/cw/DataSet/Dataset/youtube/10h/interp_pd/shinjuku10h.parquet",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "fid_min": 1,
+  "fid_max": 1080000,
+  "n_frames": 1080000,
+  "total_points": 199534399,
+  "classes": [
+    0,
+    2,
+    9,
+    25,
+    5,
+    7,
+    3,
+    1,
+    36
+  ],
+  "class_points": {
+    "0": 153333303,
+    "2": 28324824,
+    "9": 4340099,
+    "25": 2922170,
+    "5": 1662268,
+    "7": 1543930,
+    "3": 1234950,
+    "1": 1229881,
+    "36": 1190768
+  },
+  "params": {
+    "cell_px": 32,
+    "t_bucket_sec": 60,
+    "joint_cell_px": 64,
+    "joint_bucket_sec": 300
+  },
+  "shapes": {
+    "spatial": [
+      9,
+      34,
+      60
+    ],
+    "temporal": [
+      9,
+      600
+    ],
+    "joint": [
+      9,
+      120,
+      17,
+      30
+    ]
+  },
+  "npz": "shinjuku10h.stats.npz"
+}
