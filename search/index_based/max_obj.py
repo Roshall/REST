@@ -152,9 +152,30 @@ class MaxObjNumEnumerator:
         self.end_of[tid] = tra.end
         self.eq_push((tra.end, tid))
 
+    def _add_or_union(self, tra):
+        """Add a segment, unioning it into the presence the object already has.
+
+        one_pass_merge hands one segment per index cell an object occupies, so a
+        single object can arrive as several pieces that touch, overlap or nest.
+        Counting each piece as a separate presence would report an object set
+        that never existed. A piece that begins exactly at (or before) the
+        current end continues the occupancy; only a piece strictly inside the
+        live presence adds nothing.
+        """
+        tid = tra.id
+        cur = self.end_of.get(tid)
+        if cur is None:
+            self._add_one(tra)
+            return
+        if tra.begin > cur:
+            return  # a new run after a gap; the merge should have expired us
+        if tra.end > cur:
+            self.end_of[tid] = tra.end
+            self.eq_push((tra.end, tid))
+
     def _add(self, trajs):
         for tra in trajs:
-            self._add_one(tra)
+            self._add_or_union(tra)
 
     def _iterate(self):
         start, terminal = self.interval
@@ -260,7 +281,7 @@ class MaxObjNumEnumerator:
                 cur = self.end_of.get(tra.id)
                 if cur is not None and tra.end <= cur:
                     continue  # already joined by merge_prefetched
-                self._add_one(tra)
+                self._add_or_union(tra)
             buffer.pop(0)
 
         # The last window can itself be cut across; join any trailing pieces
