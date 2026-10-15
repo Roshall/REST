@@ -236,11 +236,12 @@ def max_dur_enumerate(trajs, labels: Mapping, dur, interval, *, mtd="vanilla"):
     match mtd:
         # The raw per-cell stream (one_pass) hands an object as several pieces,
         # so the one-pass enumerator unions them. Every coalescing merge
-        # (vanilla/stride/stride_win) hands one segment per object run, which is
-        # what the multi-pass enumerator expects.
+        # (vanilla/stride/stride_stream/stride_win) hands one segment per object
+        # run, which is what the multi-pass enumerator expects.
         case "one" | "one_pass" | "streaming":
             return MaxDurationOnePass(trajs, interval, verifier)
-        case "multi" | "vanilla" | "stored" | "stride" | "stride_win":
+        case "multi" | "vanilla" | "stored" | "stride" | "stride_stream" | "ss" \
+                | "stride_win" | "win":
             return MaxDurMultiPass(trajs, interval, verifier)
         case _:
             raise ValueError(f"mtd {mtd} not supported")

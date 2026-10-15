@@ -27,6 +27,7 @@ from search.rest import (
     coalesce,
     one_pass_merge,
     stride_merge,
+    stride_merge_streaming,
     stride_merge_windowed,
     vanilla_merge,
 )
@@ -92,8 +93,9 @@ def run_all_methods(segments, query, region=REGION):
 
     The pipelines mirror the framework dispatch under the stored/streaming
     groups: ``stored`` is vanilla_merge for both enumerators, and ``streaming``
-    is one_pass_merge for max_dur (whose enumerator unions the per-cell pieces)
-    and stride_merge_windowed for max_obj (whose enumerator re-joins the
+    is stride_merge_streaming for max_dur (lazily coalesced, one segment per
+    object run, so the multi-pass enumerator consumes it unchanged) and
+    stride_merge_windowed for max_obj (whose enumerator re-joins the
     window-cut pieces).
     """
     segments = clip(segments, query.interval)
@@ -106,7 +108,9 @@ def run_all_methods(segments, query, region=REGION):
                                 "sliding_naive", "sliding_state")}
 
     stored = vanilla_merge(rest_idx, TRAJS, region, labels, dur, interval)
-    stream_dur = one_pass_merge(rest_idx, TRAJS, region, labels, dur, interval)
+    stream_dur = list(stride_merge_streaming(rest_idx, TRAJS, region, labels, dur,
+                                             interval, expend=query.expend,
+                                             minima=minima))
     stream_obj = list(stride_merge_windowed(rest_idx, TRAJS, region, labels, dur,
                                             interval, expend=query.expend,
                                             minima=minima))
@@ -116,7 +120,7 @@ def run_all_methods(segments, query, region=REGION):
     return {
         "max_dur_stored": norm(max_dur_enumerate(stored, labels, dur, interval, mtd="vanilla")),
         "max_obj_stored": norm(MaxObjNumEnumerator(stored, labels, dur, interval)),
-        "max_dur_streaming": norm(max_dur_enumerate(stream_dur, labels, dur, interval, mtd="one_pass")),
+        "max_dur_streaming": norm(max_dur_enumerate(stream_dur, labels, dur, interval, mtd="stride_stream")),
         "max_obj_streaming": norm(MaxObjNumEnumerator(stream_obj, labels, dur, interval)),
         "sliding_naive": run_sliding(segments, query, "naive"),
         "sliding_state": run_sliding(segments, query, "state"),

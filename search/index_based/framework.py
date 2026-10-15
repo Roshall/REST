@@ -8,6 +8,7 @@ from search.rest import (
     coalesce,
     one_pass_merge,
     stride_merge,
+    stride_merge_streaming,
     stride_merge_windowed,
     vanilla_merge,
 )
@@ -16,10 +17,12 @@ from utilities.time_unit import interval_to_frames, seconds_to_frames
 
 # Merge groups. "stored" is the materializing baseline (vanilla_merge for every
 # enumerator); "streaming" is bounded-memory and resolves per enumerator:
-# max_dur reads one_pass_merge's raw per-cell stream and unions the pieces
-# itself, while max_obj needs per-object coalescing plus the window-cut
-# re-join, which is stride_merge_windowed. Every individual merge is selectable
-# too so any (enumerator x merge) combination can be measured.
+# max_dur reads stride_merge_streaming's lazily-coalesced stream (one segment
+# per object run, released through a pending heap, so nothing is cut and the
+# multi-pass enumerator consumes it unchanged) while max_obj needs per-object
+# coalescing plus the window-cut re-join, which is stride_merge_windowed.
+# Every individual merge is selectable too so any (enumerator x merge)
+# combination can be measured.
 _MERGE_ALIASES = {
     "stored": "vanilla",
     "materialized": "vanilla",
@@ -31,6 +34,8 @@ _MERGE_ALIASES = {
     "one_pass": "one_pass",
     "onepass": "one_pass",
     "stride": "stride",
+    "stride_stream": "stride_stream",
+    "ss": "stride_stream",
     "stride_win": "stride_win",
     "win": "stride_win",
 }
@@ -38,10 +43,10 @@ _MERGE_ALIASES = {
 
 def _streaming_merge(enu_mtd):
     """The streaming merge an enumerator is built for."""
-    return "one_pass" if enu_mtd == ("max", "dur") else "stride_win"
+    return "stride_stream" if enu_mtd == ("max", "dur") else "stride_win"
 
 
-_TWO_TOKEN_MERGES = {"one_pass", "stride_win"}
+_TWO_TOKEN_MERGES = {"one_pass", "stride_stream", "stride_win"}
 
 
 def _parse_method_str(method: str):
@@ -170,6 +175,19 @@ def index_based_framework(
             trajs = one_pass_merge(rest_idx, trajs, region, labels, dur, interval)
         case "stride":
             trajs = stride_merge(rest_idx, trajs, region, labels, dur, interval)
+        case "stride_stream":
+            # Lazily-coalescing streaming merge: one segment per object run and
+            # no window cuts, released as soon as no still-open trajectory began
+            # earlier. Same multiset as stride_merge, but the enumerator can
+            # start before the last input segment is read. Materialised here for
+            # the same list contract the other strategies hand over.
+            trajs = list(
+                stride_merge_streaming(
+                    rest_idx, trajs, region, labels, dur, interval,
+                    expend=win_args.get("expend", 2),
+                    minima=win_args.get("minima", 3000),
+                )
+            )
         case "stride_win":
             # Bounded-memory windowed streaming merge. It cuts a trajectory
             # that crosses a window boundary into a head plus a touching tail,
